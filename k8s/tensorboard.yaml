@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tensorboard-tuning
+  labels:
+    app: tensorboard-tuning
+spec:
+  selector:
+    matchLabels:
+      app: tensorboard-tuning
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: tensorboard-tuning
+    spec:
+      containers:
+        - name: tensorboard-tuning
+          image: tensorflow/tensorflow:latest
+          command: ['sh', '-c', 'tensorboard --logdir ./results/fine-tuning/runs']
+          volumeMounts:
+           - name: general-data
+             mountPath: /data
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 1
+            limits:
+              memory: 2Gi
+              cpu: 1
+          ports:
+            - containerPort: 6006
+      volumes:
+        - name: general-data
+          persistentVolumeClaim:
+            claimName: general-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tensorboard-tuning
+spec:
+  ports:
+  - port: 80
+    targetPort: 6006
+    protocol: TCP
+  selector:
+    app: tensorboard-tuning

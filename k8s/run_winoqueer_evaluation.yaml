@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: winoqueer-eval-llama
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - name: winoqueer-eval-llama
+          image: registry.datexis.com/s91000/thesis-tuning:0.0.3
+          command: ["/bin/sh", "-c"]
+          args: ["ls && cd data && pip3 install 'huggingface_hub[cli]' sentencepiece protobuf && huggingface-cli login --token $HF_TOKEN --add-to-git-credential &&  python code/evaluate_winoqueer.py" ]
+#          args: ["pip install ray[default] && nvidia-smi &&  ray start --node-ip-address=$MY_POD_IP --num-cpus=$MY_CPU_REQUEST --address=$RAY_HEAD_SERVICE_HOST:$RAY_HEAD_SERVICE_PORT_REDIS_PRIMARY --object-manager-port=12345 --node-manager-port=12346 && python train_default.py"]
+          volumeMounts:
+            - name: general-data
+              mountPath: /tuning/data
+            - name: root-temp
+              mountPath: /root
+#            - name: ray-pvc
+#              mountPath: /pvc
+#            - name: ssh-key
+#              mountPath: /root/ssh-key
+          ports:
+#            - containerPort: 12345 # Ray internal communication.
+#            - containerPort: 12346 # Ray internal communication.
+            - containerPort: 22
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+            - name: MY_CPU_REQUEST
+              valueFrom:
+                resourceFieldRef:
+                  resource: requests.cpu
+            - name: MODEL_NAME
+              value: "meta-llama/Meta-Llama-3-8B"
+#              'google/gemma-7b'
+#              'meta-llama/Meta-Llama-3-8B'
+#                'mistralai/Mistral-7B-v0.3'
+#            "openlm-research/open_llama_13b"
+            - name: HF_TOKEN
+              value: "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"
+            - name: DATASET_PATH
+              value: 'data/datasets/'
+            - name: MODE
+              value: "pretrained"
+            - name: PROMPT_LENGTH
+              value: "10"
+            - name: OUTPUT_FILE
+              value: "output.txt"
+            - name: LM_MODEL_PATH
+              value: "google/gemma-7b"
+            - name: BATCH_SIZE
+              value: "8"
+            - name: EPOCHS
+              value: "3"
+            - name: LEARNING_RATE
+              value: "0.0001"
+            - name: DATASET_SIZE
+              value: '10000'
+            - name: REDUCE_DATASET
+              value: '0'
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              cpu: 1
+              memory: 60Gi
+            limits:
+              nvidia.com/gpu: 1
+              memory: 120Gi
+              cpu: 2
+      imagePullSecrets:
+        - name: private-registry-auth
+      restartPolicy: Never
+      nodeSelector:
+        gpu: a100
+      volumes:
+        - name: general-data
+          persistentVolumeClaim:
+            claimName: general-data
+#        - name: ssh-key
+#          secret:
+#            secretName: my-ssh-public-key
+#            defaultMode: 256
+        - name: root-temp
+          persistentVolumeClaim:
+            claimName: root-temp

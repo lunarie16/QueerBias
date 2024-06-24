@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dataaccess-general
+spec:
+  containers:
+    - name: alpine
+      image: alpine:latest
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: general-data
+          mountPath: /data
+  volumes:
+    - name: general-data
+      persistentVolumeClaim:
+        claimName: general-data
