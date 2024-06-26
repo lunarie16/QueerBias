@@ -8,9 +8,9 @@ spec:
     spec:
       containers:
         - name: soft-prompt-gemma7
-          image: registry.datexis.com/s91000/thesis-tuning:0.0.3
+          image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
-          args: ["cd data && pip3 install transformers[torch] tensorboardX sentencepiece protobuf && CUDA_LAUNCH_BLOCKING=1 python code/main.py" ]
+          args: ["cd data && CUDA_LAUNCH_BLOCKING=1 python code/main.py" ]
 #          args: ["pip install ray[default] && nvidia-smi &&  ray start --node-ip-address=$MY_POD_IP --num-cpus=$MY_CPU_REQUEST --address=$RAY_HEAD_SERVICE_HOST:$RAY_HEAD_SERVICE_PORT_REDIS_PRIMARY --object-manager-port=12345 --node-manager-port=12346 && python train_default.py"]
           volumeMounts:
             - name: general-data
@@ -43,7 +43,7 @@ spec:
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'facebook/panda'
+              value: 'data/datasets/queer_news.pkl'
             - name: MODE
               value: "soft-prompt"
             - name: PROMPT_LENGTH

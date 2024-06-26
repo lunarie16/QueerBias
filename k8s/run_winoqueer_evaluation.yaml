@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: winoqueer-eval-llama
+  name: winoqueer-eval-mistral
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: winoqueer-eval-llama
+        - name: winoqueer-eval-misral
           image: registry.datexis.com/s91000/thesis-tuning:0.0.3
           command: ["/bin/sh", "-c"]
           args: ["ls && cd data && pip3 install 'huggingface_hub[cli]' sentencepiece protobuf && huggingface-cli login --token $HF_TOKEN --add-to-git-credential &&  python code/evaluate_winoqueer.py" ]
@@ -36,7 +36,7 @@ spec:
                 resourceFieldRef:
                   resource: requests.cpu
             - name: MODEL_NAME
-              value: "meta-llama/Meta-Llama-3-8B"
+              value: "mistralai/Mistral-7B-v0.3"
 #              'google/gemma-7b'
 #              'meta-llama/Meta-Llama-3-8B'
 #                'mistralai/Mistral-7B-v0.3'

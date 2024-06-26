@@ -3,7 +3,7 @@ import torch
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
     AutoModelForCausalLM
 from transformers.integrations import TensorBoardCallback
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, DatasetDict
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModel
 from logging import getLogger
@@ -84,16 +84,13 @@ class LanguageModelTrainer:
             # we assume this is the dataset QueerNews
             df = pickle.load(open(dataset_path, 'rb'))
             if 'news' in dataset_path.lower():
-                df.drop(['stories_id', 'authors', 'publish_date', 'media_outlet', 'text'], axis=1,
-                        inplace=True)
-                # deal with whitespace and empty strings - just in case
-                df['sentence'] = df['sentence'].str.strip()
-                df = df[df.sentence != '']
-                df = df[df.sentence != None]
-                df = df.dropna()
-
-                dataset = Dataset.from_pandas(df)
-                dataset = dataset.train_test_split(test_size=.05)
+                dataset_pd = Dataset.from_pandas(df)
+                train_test = dataset_pd.train_test_split(test_size=.1)
+                test_eval = train_test['test'].train_test_split(test_size=.5)
+                dataset =  DatasetDict({
+                                        "train": train_test["train"],
+                                        "test": test_eval["test"],
+                                        "validation": test_eval["train"]})
         elif dataset_path.endswith(".csv"):
             dataset = load_dataset("csv", data_files=dataset_path)
         else:
@@ -114,6 +111,7 @@ class LanguageModelTrainer:
 
         training_args = TrainingArguments(
             output_dir=f"data/results/{self.mode}",
+            disable_tqdm=False,
             # overwrite_output_dir=True,
             num_train_epochs=num_train_epochs,
             per_device_train_batch_size=batch_size,
@@ -147,7 +145,7 @@ class LanguageModelTrainer:
         logger.info("Evaluation started...")
         trainer.evaluate()
         end = time.time()
-        elapsed_time = start = end
+        elapsed_time = start - end
         with open(f"data/results/{self.mode}/summary-{self.model_name}-{end}.txt", 'w') as f:
             f.write(f"Time elapsed for training: {elapsed_time}")
             f.write(f"Model: {self.model_name}")

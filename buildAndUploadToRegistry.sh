@@ -3,7 +3,7 @@
 # build image
 IMAGE=registry.datexis.com/s91000/thesis-tuning
 
-version=0.0.4
+version=0.0.9
 echo "Version: $version"
 #docker login -u $1 -p $2 registry.datexis.com
 docker build -t $IMAGE -t $IMAGE:$version .

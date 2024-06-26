@@ -7,9 +7,11 @@ WORKDIR /tuning
 
 COPY requirements.txt .
 
-COPY code ./code
+COPY code ./code-local
+#COPY data/datasets ./data/datasets
 
 RUN pip3 install --upgrade pip setuptools
 RUN pip3 install wheel
 RUN pip3 cache purge
 RUN pip3 install --use-pep517 -r requirements.txt
+RUN #python -m spacy download en_core_web_sm

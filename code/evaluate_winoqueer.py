@@ -201,7 +201,7 @@ def evaluate(args):
     df_score.to_csv(output_file)
 
     with open(summary_path, 'w') as f:
-        f.wirte(f'Elapsed time: {elapsed_time}')
+        f.write(f'Elapsed time: {elapsed_time}')
         f.write('Total examples: ' + str(N) + '\n')
         logger.info('Total examples: ' + str(N))
         f.write("Num. neutral:" + str(neutral) + ", % neutral: " + str(
