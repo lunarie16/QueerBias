@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from PromptTuning import PromptTuningModel
 import difflib
 import time
+import csv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -112,8 +113,8 @@ def evaluate(args):
     # Load model and tokenizer based on mode
     if args.mode == "soft-prompt":
         trainer = PromptTuningModel(model_name=args.model_name, token=args.token,
-                                    prompt_length=args.prompt_length, device=args.device)
-        trainer.load_trained_prompts()
+                                    num_soft_prompts=args.prompt_length, device=args.device)
+        trainer.load_soft_prompts()
         tokenizer = trainer.tokenizer
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
@@ -200,49 +201,52 @@ def evaluate(args):
     summary_path = f"data/results/winoqueer/summary_{file_extension}-{args.mode}.csv"
     df_score.to_csv(output_file)
 
-    with open(summary_path, 'w') as f:
-        f.write(f'Elapsed time: {elapsed_time}')
-        f.write('Total examples: ' + str(N) + '\n')
-        logger.info('Total examples: ' + str(N))
-        f.write("Num. neutral:" + str(neutral) + ", % neutral: " + str(
-            round(neutral / N * 100, 2)) + '\n')
-        logger.info("Num. neutral:" + str(neutral) + ", % neutral: " + str(
-            round(neutral / N * 100, 2)))
-        f.write('Winoqueer Overall Score: ' + str(round(stereo_score / N * 100, 2)) + '\n')
-        logger.info('Winoqueer Overall Score: ' + str(round(stereo_score / N * 100, 2)))
-        f.write('Score Breakdown by Target of Bias:\n')
-        logger.info('Score Breakdown by Target of Bias:')
+
+
+    # Assuming these variables are already defined
+    # elapsed_time, N, neutral, stereo_score, category_scores, df_data, args, summary_path
+
+    with open(summary_path, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+
+        # Write summary statistics
+        writer.writerow(['Summary Statistics'])
+        writer.writerow(['Metric', 'Value'])
+        writer.writerow(['Elapsed time', elapsed_time])
+        writer.writerow(['Total examples', N])
+        writer.writerow(['Num. neutral', neutral])
+        writer.writerow(['% neutral', round(neutral / N * 100, 2)])
+        writer.writerow(['Winoqueer Overall Score', round(stereo_score / N * 100, 2)])
+        writer.writerow([])
+
+        # Write score breakdown by category
+        writer.writerow(['Score Breakdown by Target of Bias'])
+        writer.writerow(['Category', 'Number of Examples', 'Bias Score (%)'])
         for k, v in category_scores.items():
-            f.write("Category: " + k + '\n')
-            logger.info("Category: " + k)
-            f.write("    Number of examples: " + str(v['count']) + '\n')
-            logger.info("    Number of examples: " + str(v['count']))
             if v['count'] > 0:
                 v['metric'] = round(v['score'] / v['count'] * 100, 2)
-                f.write("    Bias score against group " + k + ": " + str(v['metric']) + '\n')
-                logger.info("    Bias score against group " + k + ": " + str(v['metric']))
+            else:
+                v['metric'] = 0
+            writer.writerow([k, v['count'], v['metric']])
+        writer.writerow([])
 
-        f.write(
-            f"For pasting into spreadsheet (Order Overall, {', '.join(df_data['Gender_ID_x'].unique())}):")
-        logger.info(
-            f"For pasting into spreadsheet (Order Overall, {', '.join(df_data['Gender_ID_x'].unique())}):")
-        # use list of keys instead of category_scores.items() to force order to match the spreadsheet
-        f.write(str(round(stereo_score / N * 100, 2)) + ", " + ", ".join(
-            [str(category_scores[key]['metric']) for key in
-             df_data['Gender_ID_x'].unique()]))
-        logger.info(str(round(stereo_score / N * 100, 2)) + ", " + ", ".join(
-            [str(category_scores[key]['metric']) for key in
-             df_data['Gender_ID_x'].unique()]))
+        # Write data for pasting into a spreadsheet
+        writer.writerow(['Data for Spreadsheet'])
+        gender_categories = df_data['Gender_ID_x'].unique()
+        writer.writerow(['Order Overall'] + list(gender_categories))
+        row = [round(stereo_score / N * 100, 2)]
+        row.extend([category_scores[key]['metric'] if key in category_scores else 0 for key in
+                    gender_categories])
+        writer.writerow(row)
 
     logger.info('=' * 100)
     logger.info("Output written to: " + args.output_file)
     logger.info("summary stats written to: " + summary_path)
     logger.info(
         f"For pasting into spreadsheet (Order Overall, {', '.join(df_data['Gender_ID_x'].unique())}:\n")
-    # use list of keys instead of category_scores.items() to force order to match the spreadsheet
-    logger.info(str(round(stereo_score / N * 100, 2)) + ", " + ", ".join(
-        [str(category_scores[key]['metric']) for key in df_data['Gender_ID_x'].unique()]) + "\n")
+    logger.info(str(row) + "\n")
     logger.info('=' * 100)
+
 
 if __name__ == "__main__":
     class Args:

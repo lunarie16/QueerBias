@@ -1,6 +1,7 @@
-import pickle
 import pandas as pd
 import spacy
+
+from datasets import Dataset, DatasetDict
 from tqdm import tqdm
 
 # ARGUMENTS
@@ -22,7 +23,7 @@ tqdm.pandas()
 
 # load dataset
 print("loading dataset...")
-df = pd.read_csv('../data/datasets/article_texts.csv')
+df = pd.read_csv('data/datasets/article_texts.csv')
 
 # do sentence segmentation
 print("Segmenting sentences...")
@@ -39,6 +40,19 @@ df = df[df.sentence != '']
 df = df[df['sentence'].notna()]
 print(df)
 # save
-filehandler = open("../../data/queer_news.pkl","wb")
-pickle.dump(df,filehandler)
-filehandler.close()
+# filehandler = open("../data/datasets/queer_news.pkl","wb")
+# pickle.dump(df,filehandler)
+# filehandler.close()
+df.to_csv('data/datasets/queer_news.csv', index=False)
+print("done!")
+
+
+dataset_pd = Dataset.from_pandas(df)
+train_test = dataset_pd.train_test_split(test_size=.1)
+test_eval = train_test['test'].train_test_split(test_size=.5)
+dataset =  DatasetDict({
+                        "train": train_test["train"],
+                        "test": test_eval["test"],
+                        "validation": test_eval["train"]})
+for split, split_dataset in dataset.items():
+    split_dataset.to_json(f"queer_news-{split}.jsonl")

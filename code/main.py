@@ -1,14 +1,18 @@
 import os
+
+import pandas as pd
 import torch
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
     AutoModelForCausalLM
-from transformers.integrations import TensorBoardCallback
 from datasets import load_dataset, Dataset, DatasetDict
+from datasets.fingerprint import Hasher
+
 from dotenv import load_dotenv
-from PromptTuning import PromptTuningModel
+from PromptTuning import PromptTuningModel, SoftPromptTrainer
 from logging import getLogger
 import time
 import pickle
+import gc
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -18,12 +22,15 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 
 class LanguageModelTrainer:
-    def __init__(self, model_name: str, mode: str = "soft-prompt", prompt_length: int = 10) -> None:
+    def __init__(self, model_name: str,
+                 mode: str = "soft-prompt",
+                 prompt_length: int = 10) -> None:
         self.model_name = model_name
         self.mode = mode
         self.prompt_length = prompt_length
         self.device = self.get_device()
         self.model, self.tokenizer = self.load_model_and_tokenizer()
+        gc.collect()
 
     @staticmethod
     def get_device() -> torch.device:
@@ -65,7 +72,6 @@ class LanguageModelTrainer:
 
         logger.warning(f"Tokenizer vocab size: {tokenizer.vocab_size}")
         logger.warning(f"Tokenizer special tokens: {tokenizer.all_special_tokens}")
-
         return model, tokenizer
 
     def tokenize_function(self, tokenizer, example):
@@ -76,12 +82,12 @@ class LanguageModelTrainer:
             return tokenizer(example['original'], max_length=512, truncation=True,
                              padding='max_length')
 
+    Hasher.hash(tokenize_function)
     def load_data(self, dataset_path: str):
         """Loads and splits the dataset into training and evaluation sets."""
         logger.info(f"Loading dataset {dataset_path}")
 
         if dataset_path.endswith(".pkl"):
-            # we assume this is the dataset QueerNews
             df = pickle.load(open(dataset_path, 'rb'))
             if 'news' in dataset_path.lower():
                 dataset_pd = Dataset.from_pandas(df)
@@ -91,14 +97,25 @@ class LanguageModelTrainer:
                                         "train": train_test["train"],
                                         "test": test_eval["test"],
                                         "validation": test_eval["train"]})
+                dataset.save_to_disk("data/datasets/queer_news.hf")
         elif dataset_path.endswith(".csv"):
             dataset = load_dataset("csv", data_files=dataset_path)
+            # drop all sentences that are none
+            dataset = dataset.filter(lambda x: x['sentence'] is not None)
+            if not 'validation' in dataset.data:
+                train_test = dataset['train'].train_test_split(test_size=.1)
+                test_eval = train_test['test'].train_test_split(test_size=.5)
+                dataset = DatasetDict({
+                    "train": train_test["train"],
+                    "test": test_eval["test"],
+                    "validation": test_eval["train"]})
+                dataset.save_to_disk("data/datasets/queer_news.hf")
         else:
             dataset = load_dataset(dataset_path)
         logger.info("Dataset loaded. Now tokenizing...")
         #take small subset
         # Take small subset and apply the standalone tokenize function
-        dataset = dataset.map(lambda x: self.tokenize_function(self.tokenizer, x), batched=True)
+        dataset = dataset.map(lambda x: self.tokenize_function(self.tokenizer, x), batched=True, num_proc=4)
 
         logger.info(
             f"Dataset loading complete. Train size: {len(dataset['train'])}, Validation size: {len(dataset['validation'])}")
@@ -123,23 +140,32 @@ class LanguageModelTrainer:
         )
 
         data_collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=False)
-
-        trainer = Trainer(
-            model=self.model,
-            args=training_args,
-            data_collator=data_collator,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-        )
+        if self.mode == 'soft-prompt':
+            trainer = SoftPromptTrainer(
+                model=self.model,
+                args=training_args,
+                data_collator=data_collator,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+            )
+        else:
+            trainer = Trainer(
+                model=self.model,
+                args=training_args,
+                data_collator=data_collator,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+            )
         logger.info("Training started...")
         start = time.time()
         trainer.train()
         logger.info("Training complete.")
         if self.mode == 'soft-prompt':
-            self.model.save_prompt_embeddings("trained_prompt_embeddings.pt")
+            soft_prompt_path = dataset_path.split("/")[-1].split(".")[0]
+            self.model.save_prompt_embeddings(f"data/results/soft-prompt/{soft_prompt_path}_trained_prompt_embeddings.pt")
             logger.info("Prompt embeddings saved.")
         else:
-            trainer.save_model()
+            trainer.save_model('data/results/fine-tuning/models/')
             logger.info("Model saved.")
 
         logger.info("Evaluation started...")
@@ -150,57 +176,41 @@ class LanguageModelTrainer:
             f.write(f"Time elapsed for training: {elapsed_time}")
             f.write(f"Model: {self.model_name}")
             f.write(f"Dataset: {dataset_path}")
+        logger.info("Evaluation complete.")
 
 
-    def load_trained_prompts(self, prompt_path: str = "trained_prompt_embeddings.pt") -> None:
-        """Loads the trained prompt embeddings."""
-        self.model.load_prompt_embeddings(prompt_path)
-
-    # def soft_prompt(self, prompt: str) -> None:
-    #     """Generates text using the soft prompt."""
-    #     if self.mode != 'soft-prompt':
-    #         raise ValueError("This method is only available in soft-prompt mode.")
-    #
-    #     logger.info("Loading soft prompts...")
-    #     # Prepend the soft prompts to the input prompt
-    #     prompt_embeddings = self.model.get_prompt_embeddings().to(self.device)
-    #     tokenized_input = self.tokenizer(prompt, return_tensors="pt").to(self.device)
-    #
-    #     # Prepend prompt embeddings
-    #     inputs_embeds = self.model.transformer.wte(tokenized_input['input_ids'])
-    #     inputs_embeds = torch.cat([prompt_embeddings, inputs_embeds], dim=1)
-    #
-    #     # Adjust attention mask
-    #     attention_mask = torch.cat([torch.ones(
-    #         (tokenized_input['input_ids'].shape[0], self.prompt_length), device=self.device),
-    #         tokenized_input['attention_mask']], dim=1)
-    #
-    #     with torch.no_grad():
-    #         outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
-    #         logits = outputs.logits
-    #         predicted_ids = torch.argmax(logits, dim=-1)
-    #
-    #     generated_text = self.tokenizer.decode(predicted_ids[0], skip_special_tokens=True)
-    #     logger.info("Generated Text:", generated_text)
+    # def load_trained_prompts(self, prompt_path: str = "trained_prompt_embeddings.pt") -> None:
+    #     """Loads the trained prompt embeddings."""
+    #     if not os.path.exists(prompt_path):
+    #         dataset_path = self.dataset_path.split("/")[-1].split(".")[0]
+    #     prompt_path = f"data/results/soft-prompt/{dataset_path}_trained_prompt_embeddings.pt"
+    #     self.model.load_prompt_embeddings(prompt_path)
 
 
 if __name__ == "__main__":
-    model_name = os.getenv("MODEL_NAME")
-    dataset_path = os.getenv("DATASET_PATH")
-    mode = os.getenv("MODE")
-    prompt_length = int(os.getenv("PROMPT_LENGTH"))
-    batch_size = int(os.getenv("BATCH_SIZE"))
-    learning_rate = float(os.getenv("LEARNING_RATE"))
-    epochs = int(os.getenv("EPOCHS"))
+    model_name = os.getenv("MODEL_NAME", 'google/gemma-7b')
+    dataset_path = os.getenv("DATASET_PATH", 'data/datasets/queer_news.pkl')
+    mode = os.getenv("MODE", 'soft-prompt')
+    prompt_length = int(os.getenv("PROMPT_LENGTH", 10))
+    batch_size = int(os.getenv("BATCH_SIZE", 8))
+    learning_rate = float(os.getenv("LEARNING_RATE", 1e-5))
+    epochs = int(os.getenv("EPOCHS", 3))
+
 
     # list settings
     logger.info(f"Model Name: {model_name}")
     logger.info(f"Dataset Path: {dataset_path}")
     logger.info(f"Mode: {mode}")
     logger.info(f"Prompt Length: {prompt_length}")
+    logger.info(f"Batch Size: {batch_size}")
+    logger.info(f"Learning Rate: {learning_rate}")
+    logger.info(f"Epochs: {epochs}")
 
 
-    lm_trainer = LanguageModelTrainer(model_name=model_name, mode=mode, prompt_length=prompt_length)
+
+    lm_trainer = LanguageModelTrainer(model_name=model_name,
+                                      mode=mode,
+                                      prompt_length=prompt_length)
 
     lm_trainer.train(dataset_path=dataset_path,
                      num_train_epochs=epochs,

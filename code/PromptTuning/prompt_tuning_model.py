@@ -1,6 +1,7 @@
 import torch
 from torch import nn
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer
+from transformers.optimization import AdamW
 import logging
 
 # Set up logging
@@ -15,8 +16,8 @@ class PromptTuningModel(nn.Module):
         self.embedding_layer = self.model.get_input_embeddings()
         self.embedding_size = self.embedding_layer.embedding_dim
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.num_soft_prompts = num_soft_prompts
-        self.soft_prompts = nn.Parameter(self.initialize_embedding(self.embedding_layer, num_soft_prompts)).to(device)
+        self.prompt_length = num_soft_prompts
+        self.soft_prompts = nn.Parameter(self.initialize_embedding(self.embedding_layer, self.prompt_length)).to(device)
 
         # Freeze model parameters
         for param in self.model.parameters():
@@ -29,44 +30,37 @@ class PromptTuningModel(nn.Module):
         return torch.FloatTensor(n_tokens, wte.weight.size(1)).uniform_(-random_range, random_range)
 
     def forward(self, input_ids, attention_mask=None, labels=None):
-        # Debugging: log shapes
-        logger.warning(f"input_ids shape: {input_ids.shape}")
+        prompt_ids = torch.arange(self.prompt_length, device=input_ids.device).unsqueeze(
+            0).expand(input_ids.size(0), -1)
+        prompt_embedding = self.soft_prompts[prompt_ids]
+        inputs_embeds = self.embedding_layer(input_ids)
+        inputs_embeds = torch.cat((prompt_embedding, inputs_embeds), dim=1)
 
-        # Check the range of input_ids
-        logger.warning(f"input_ids max value: {input_ids.max().item()}, input_ids min value: {input_ids.min().item()}")
-        vocab_size = self.embedding_layer.num_embeddings
-        logger.warning(f"Vocab size: {vocab_size}")
+        attention_mask = torch.cat((torch.ones(prompt_embedding.size()[:-1],
+                                               device=attention_mask.device), attention_mask),
+                                   dim=1)
 
-        if input_ids.max().item() >= vocab_size or input_ids.min().item() < 0:
-            raise ValueError(f"input_ids contain indices outside the valid range (0, {vocab_size-1})")
-
-        input_embeddings = self.embedding_layer(input_ids)
-        logger.warning(f"input_embeddings shape: {input_embeddings.shape}")
-
-        batch_size = input_embeddings.size(0)
-        seq_length = input_embeddings.size(1)
-        # Expand prompt embeddings to match the batch size
-        expanded_prompt_embeddings = self.soft_prompts.unsqueeze(0).expand(batch_size, -1, -1)
-        logger.warning(f"expanded_prompt_embeddings shape: {expanded_prompt_embeddings.shape}")
-
-        # Concatenate prompt embeddings with input embeddings
-        extended_input_embeddings = torch.cat([expanded_prompt_embeddings, input_embeddings], dim=1)
-        logger.warning(f"extended_input_embeddings shape: {extended_input_embeddings.shape}")
-
-        # Adjust attention mask to account for prompt tokens
-        if attention_mask is not None:
-            extended_attention_mask = torch.cat([torch.ones(batch_size, self.num_soft_prompts, device=input_ids.device), attention_mask], dim=1)
-        else:
-            extended_attention_mask = None
-        logger.warning(f"extended_attention_mask shape: {extended_attention_mask.shape if extended_attention_mask is not None else 'None'}")
-
-        # Pass through the model
-        outputs = self.model(inputs_embeds=extended_input_embeddings, attention_mask=extended_attention_mask, labels=labels)
+        outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
         return outputs
 
     def save_soft_prompts(self, file_path: str):
         torch.save(self.soft_prompts, file_path)
 
-    def load_soft_prompts(self, file_path: str):
+    def load_soft_prompts(self, file_path: str = None):
+        if not file_path:
+            dataset_path = 'queer_news'
+            file_path = f'data/results/soft-prompt/{dataset_path}_trained_prompt_embeddings.pt'
         self.soft_prompts = torch.load(file_path).to(self.device)
         self.soft_prompts = nn.Parameter(self.soft_prompts)
+
+
+class SoftPromptTrainer(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def create_optimizer_and_scheduler(self, num_training_steps: int):
+        # Create an optimizer for only the prompt embeddings
+        self.optimizer = AdamW([self.model.soft_prompts], lr=self.args.learning_rate)
+
+        self.lr_scheduler = self.create_scheduler(
+            num_training_steps=num_training_steps, optimizer=self.optimizer
+        )
