@@ -114,7 +114,10 @@ def evaluate(args):
     if args.mode == "soft-prompt":
         trainer = PromptTuningModel(model_name=args.model_name, token=args.token,
                                     num_soft_prompts=args.prompt_length, device=args.device)
-        trainer.load_soft_prompts()
+        if args.soft_prompt_path:
+            trainer.load_soft_prompts(args.soft_prompt_path)
+        else:
+            trainer.load_soft_prompts()
         tokenizer = trainer.tokenizer
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
@@ -259,6 +262,7 @@ if __name__ == "__main__":
         token = os.getenv('HF_TOKEN')
         dataset_size = int(os.getenv('DATASET_SIZE'))
         reduce_dataset = bool(int(os.getenv('REDUCE_DATASET', 0)))
+        soft_prompt_path = os.getenv('SOFT_PROMPT_PATH')
         @staticmethod
         def get_device() -> torch.device:
             """Utility function to get the available device."""
@@ -283,6 +287,7 @@ if __name__ == "__main__":
     logger.info(f"Token: {args.token}")
     logger.info(f"Reduce dataset {args.reduce_dataset}")
     logger.info(f"Reduce to size {args.dataset_size}")
+    logger.info(f"Soft Prompt Path: {args.soft_prompt_path}")
 
 
     if not args.dataset_path or not args.output_file or not args.mode:

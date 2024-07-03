@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
     AutoModelForCausalLM
-from datasets import load_dataset, Dataset, DatasetDict
+from datasets import load_dataset, Dataset, DatasetDict, set_caching_enabled
 from datasets.fingerprint import Hasher
 
 from dotenv import load_dotenv
@@ -20,6 +20,8 @@ logger.setLevel("INFO")
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 
+set_caching_enabled(True)
+
 
 class LanguageModelTrainer:
     def __init__(self, model_name: str,
@@ -30,6 +32,7 @@ class LanguageModelTrainer:
         self.prompt_length = prompt_length
         self.device = self.get_device()
         self.model, self.tokenizer = self.load_model_and_tokenizer()
+
         gc.collect()
 
     @staticmethod
@@ -69,17 +72,14 @@ class LanguageModelTrainer:
         logger.warning(f"Tokenizer special tokens: {tokenizer.all_special_tokens}")
 
         model = model.to(self.device)
-
-        logger.warning(f"Tokenizer vocab size: {tokenizer.vocab_size}")
-        logger.warning(f"Tokenizer special tokens: {tokenizer.all_special_tokens}")
         return model, tokenizer
 
-    def tokenize_function(self, tokenizer, example):
+    def tokenize_function(self, example):
         if 'sentence' in example:
-            return tokenizer(example['sentence'], max_length=512, truncation=True,
+            return self.tokenizer(example['sentence'], max_length=512, truncation=True,
                              padding='max_length')
         elif 'original' in example:
-            return tokenizer(example['original'], max_length=512, truncation=True,
+            return self.tokenizer(example['original'], max_length=512, truncation=True,
                              padding='max_length')
 
     Hasher.hash(tokenize_function)
@@ -112,10 +112,16 @@ class LanguageModelTrainer:
                 dataset.save_to_disk("data/datasets/queer_news.hf")
         else:
             dataset = load_dataset(dataset_path)
+
+        if bool(int(os.getenv("REDUCE_DATASET", 1))):
+            reduced_size = 1000
+            logger.info(f"Reducing dataset size to {reduced_size}")
+            dataset['train'] = dataset['train'].select(range(reduced_size))
+            dataset['validation'] = dataset['validation'].select(range(reduced_size))
+
         logger.info("Dataset loaded. Now tokenizing...")
         #take small subset
-        # Take small subset and apply the standalone tokenize function
-        dataset = dataset.map(lambda x: self.tokenize_function(self.tokenizer, x), batched=True, num_proc=4)
+        dataset = dataset.map(self.tokenize_function, batched=True)
 
         logger.info(
             f"Dataset loading complete. Train size: {len(dataset['train'])}, Validation size: {len(dataset['validation'])}")
@@ -128,6 +134,8 @@ class LanguageModelTrainer:
 
         training_args = TrainingArguments(
             output_dir=f"data/results/{self.mode}",
+            # FutureWarning: `evaluation_strategy` is deprecated and will be removed in version 4.46 of 🤗 Transformers. Use `eval_strategy` instead
+            # eval_strategy="steps",
             disable_tqdm=False,
             # overwrite_output_dir=True,
             num_train_epochs=num_train_epochs,
@@ -162,7 +170,7 @@ class LanguageModelTrainer:
         logger.info("Training complete.")
         if self.mode == 'soft-prompt':
             soft_prompt_path = dataset_path.split("/")[-1].split(".")[0]
-            self.model.save_prompt_embeddings(f"data/results/soft-prompt/{soft_prompt_path}_trained_prompt_embeddings.pt")
+            self.model.save_soft_prompts(f"data/results/soft-prompt/{soft_prompt_path}_trained_prompt_embeddings.pt")
             logger.info("Prompt embeddings saved.")
         else:
             trainer.save_model('data/results/fine-tuning/models/')
@@ -172,7 +180,9 @@ class LanguageModelTrainer:
         trainer.evaluate()
         end = time.time()
         elapsed_time = start - end
-        with open(f"data/results/{self.mode}/summary-{self.model_name}-{end}.txt", 'w') as f:
+        end = time.strftime("%Y%m%d-%H%M%S")
+        model_name = self.model_name.replace("/", "-")[-1]
+        with open(f"data/results/{self.mode}/summary-{model_name}-{end}.txt", 'w') as f:
             f.write(f"Time elapsed for training: {elapsed_time}")
             f.write(f"Model: {self.model_name}")
             f.write(f"Dataset: {dataset_path}")
