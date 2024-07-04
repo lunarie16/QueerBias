@@ -46,6 +46,7 @@ batch_size = int(os.getenv("BATCH_SIZE", 8))
 learning_rate = float(os.getenv("LEARNING_RATE", 1e-5))
 epochs = int(os.getenv("EPOCHS", 3))
 device = get_device()
+deepspeed_path = os.getenv("DEEPSPEED_PATH", None)
 gc.collect()
 
 
@@ -107,7 +108,7 @@ else:
     dataset = load_dataset(dataset_path)
 
 if bool(int(os.getenv("REDUCE_DATASET", 1))):
-    reduced_size = 1000
+    reduced_size = int(os.getenv("REDUCE_DATASET_SIZE", 10000))
     logger.info(f"Reducing dataset size to {reduced_size}")
     dataset['train'] = dataset['train'].select(range(reduced_size))
     dataset['validation'] = dataset['validation'].select(range(reduced_size))
@@ -121,17 +122,30 @@ logger.info(
 train_dataset = dataset['train']
 eval_dataset = dataset['validation']
 
-
-training_args = TrainingArguments(
-    output_dir=f"data/results/{mode}",
-    eval_strategy="epoch",
-    disable_tqdm=False,
-    num_train_epochs=epochs,
-    per_device_train_batch_size=batch_size,
-    learning_rate=learning_rate,
-    prediction_loss_only=True,
-    report_to=["tensorboard"],
-    weight_decay=0.01,
+if deepspeed_path is not None:
+    training_args = TrainingArguments(
+        output_dir=f"data/results/{mode}",
+        eval_strategy="epoch",
+        disable_tqdm=False,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        learning_rate=learning_rate,
+        prediction_loss_only=True,
+        report_to=["tensorboard"],
+        weight_decay=0.01,
+        deepspeed=deepspeed_path
+    )
+else:
+    training_args = TrainingArguments(
+        output_dir=f"data/results/{mode}",
+        eval_strategy="epoch",
+        disable_tqdm=False,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        learning_rate=learning_rate,
+        prediction_loss_only=True,
+        report_to=["tensorboard"],
+        weight_decay=0.01,
 )
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -156,13 +170,8 @@ start = time.time()
 trainer.train()
 logger.info("Training complete.")
 
-if mode == 'soft-prompt':
-    soft_prompt_path = dataset_path.split("/")[-1].split(".")[0]
-    model.save_soft_prompts(f"data/results/soft-prompt/{soft_prompt_path}_trained_prompt_embeddings.pt")
-    logger.info("Prompt embeddings saved.")
-else:
-    trainer.save_model('data/results/fine-tuning/models/')
-    logger.info("Model saved.")
+
+trainer.save_model('data/results/fine-tuning/models/')
 
 logger.info("Evaluation started...")
 trainer.evaluate()
@@ -174,5 +183,8 @@ with open(f"data/results/{mode}/summary-{model_name}-{end}.txt", 'w') as f:
     f.write(f"Time elapsed for training: {elapsed_time}")
     f.write(f"Model: {model_name}")
     f.write(f"Dataset: {dataset_path}")
-logger.info("Evaluation complete.")
-
+    f.write(f"Prompt length: {prompt_length}")
+    f.write(f"Batch size: {batch_size}")
+    f.write(f"Learning rate: {learning_rate}")
+    f.write(f"Epochs: {epochs}")
+    f.write(f"Device: {device}")

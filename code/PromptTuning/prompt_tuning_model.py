@@ -12,6 +12,7 @@ class PromptTuningModel(nn.Module):
     def __init__(self, model_name, token, num_soft_prompts, device):
         super(PromptTuningModel, self).__init__()
         self.device = device
+        self.model_name = model_name
         self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, token=token).to(device)
         self.embedding_layer = self.model.get_input_embeddings()
         self.embedding_size = self.embedding_layer.embedding_dim
@@ -60,6 +61,27 @@ class PromptTuningModel(nn.Module):
             file_path = f'data/results/soft-prompt/{dataset_path}_trained_prompt_embeddings.pt'
         self.soft_prompts = torch.load(file_path).to(self.device)
         self.soft_prompts = nn.Parameter(self.soft_prompts)
+
+    def save_model(self, save_path):
+        """Save the model with special handling for shared weights"""
+        save_path = f"{save_path}-{self.model_name}.pt"
+        model_to_save = {
+            'model_state_dict': self.model.state_dict(),
+            'soft_prompts': self.soft_prompts
+        }
+        torch.save(model_to_save, save_path)
+
+    @classmethod
+    def load_model(cls, load_path, model_name, token, num_soft_prompts, device):
+        """Load the model with special handling for shared weights"""
+        load_path = f"{load_path}-{model_name}.pt"
+        checkpoint = torch.load(load_path)
+        model = cls(model_name, token, num_soft_prompts, device)
+        model.model.load_state_dict(checkpoint['model_state_dict'])
+        model.soft_prompts.data = checkpoint['soft_prompts'].data
+        # Ensure shared weights are correctly referenced
+        model.model.get_input_embeddings().weight = model.model.lm_head.weight = model.model.model.embed_tokens.weight
+        return model
 
 
 

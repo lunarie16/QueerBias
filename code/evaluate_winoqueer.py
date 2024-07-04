@@ -112,7 +112,7 @@ def mask_unigram(data, lm, n=1):
 def evaluate(args):
     # Load model and tokenizer based on mode
     if args.mode == "soft-prompt":
-        trainer = PromptTuningModel(model_name=args.model_name, token=args.token,
+        trainer = PromptTuningModel.load_model(args.model_path, model_name=args.model_name, token=args.token,
                                     num_soft_prompts=args.prompt_length, device=args.device)
         if args.soft_prompt_path:
             trainer.load_soft_prompts(args.soft_prompt_path)

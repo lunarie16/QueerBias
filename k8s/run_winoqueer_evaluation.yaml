@@ -41,6 +41,8 @@ spec:
 #              'meta-llama/Meta-Llama-3-8B'
 #                'mistralai/Mistral-7B-v0.3'
 #            "openlm-research/open_llama_13b"
+            - name: MODEL_PATH
+              value: "data/results/fine-tuning/models/"
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
