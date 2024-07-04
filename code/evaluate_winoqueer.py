@@ -61,7 +61,6 @@ def mask_unigram(data, lm, n=1):
     """
     tokenizer = lm["tokenizer"]
     uncased = lm["uncased"]
-    model = lm["model"]
 
     sent1, sent2 = data["sent_x"], data["sent_y"]
 
@@ -112,13 +111,10 @@ def mask_unigram(data, lm, n=1):
 def evaluate(args):
     # Load model and tokenizer based on mode
     if args.mode == "soft-prompt":
-        trainer = PromptTuningModel.load_model(args.model_path, model_name=args.model_name, token=args.token,
+        model = PromptTuningModel.load_model(args.model_path, model_name=args.model_name, token=args.token,
                                     num_soft_prompts=args.prompt_length, device=args.device)
-        if args.soft_prompt_path:
-            trainer.load_soft_prompts(args.soft_prompt_path)
-        else:
-            trainer.load_soft_prompts()
-        tokenizer = trainer.tokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
                                                     torch_dtype=torch.bfloat16,
@@ -197,8 +193,11 @@ def evaluate(args):
             df_score = pd.concat([df_score, pd.DataFrame([new_row])], ignore_index=True)
     end = time.time()
     elapsed_time = start - end
+    # add model name without company
     file_extension = args.model_name.split("/")[-1]
+    # add information if gender or sexual identity
     file_extension += args.dataset_path.split("/")[-1].split("_")[1]
+    # add dataset size
     file_extension += str(len(df_data.index))
     output_file = f"data/results/winoqueer/detailed_{file_extension}-{args.mode}.csv"
     summary_path = f"data/results/winoqueer/summary_{file_extension}-{args.mode}.csv"
@@ -255,7 +254,7 @@ if __name__ == "__main__":
     class Args:
         dataset_path = os.getenv('DATASET_PATH')
         output_file = os.getenv('OUTPUT_FILE')
-        lm_model_path = os.getenv('LM_MODEL_PATH')
+        model_path = os.getenv('MODEL_PATH')
         model_name = os.getenv('MODEL_NAME', 'gpt2')
         prompt_length = int(os.getenv('PROMPT_LENGTH', 10))
         mode = os.getenv('MODE')

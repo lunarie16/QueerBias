@@ -1,16 +1,16 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: soft-prompt-llama-queer-news
+  name: fine-tuning-gemma-queer-news
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: soft-prompt-llama-queer-news
+        - name: fine-tuning-gemma-queer-news
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
-          args: ["cd data && cat code/PromptTuning/prompt_tuning_model.py && pip install accelerate tensorboardX sentencepiece protobuf && python code/main_no_class.py" ]
+          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && python code/main_no_class.py" ]
 #          args: [ "cd data && pip install &&  python code/segment_articles.py" ]
           #          args: ["cd data && export CUDA_HOME=/usr/local/cuda && export PATH=\"${CUDA_HOME}/bin:$PATH\" && python code/main_no_class.py"]
 
@@ -37,7 +37,7 @@ spec:
                 resourceFieldRef:
                   resource: requests.cpu
             - name: MODEL_NAME
-              value: 'meta-llama/Meta-Llama-3-8B'
+              value: 'google/gemma-7b'
               #              'google/gemma-7b'
               #              'meta-llama/Meta-Llama-3-8B'
               #                'mistralai/Mistral-7B-v0.3'
@@ -47,7 +47,7 @@ spec:
             - name: DATASET_PATH
               value: 'data/datasets/queer_news.hf'
             - name: MODE
-              value: "soft-prompt"
+              value: "fine-tuning"
             - name: PROMPT_LENGTH
               value: "10"
             - name: OUTPUT_FILE
@@ -57,7 +57,7 @@ spec:
             - name: LM_MODEL_PATH
               value: "google/gemma-7b"
             - name: REDUCE_DATASET
-              value: "0"
+              value: "1"
             - name: REDUCE_DATASET_SIZE
               value: "10000"
             - name: BATCH_SIZE
@@ -69,16 +69,16 @@ spec:
 
           resources:
             requests:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 3
               cpu: 1
             limits:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 3
               cpu: 2
       imagePullSecrets:
         - name: private-registry-auth
       restartPolicy: Never
       nodeSelector:
-        gpu: h100
+        gpu: a100
       volumes:
         - name: general-data
           persistentVolumeClaim:

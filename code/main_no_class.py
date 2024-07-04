@@ -21,12 +21,6 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 enable_caching()
 
 
-def custom_save_model(trainer, output_dir):
-    trainer.save_model(output_dir)
-    torch.save({
-        'soft_prompts': trainer.model.soft_prompts.data,
-    }, f"{output_dir}/soft_prompts.pth")
-
 @staticmethod
 def get_device() -> torch.device:
     """Utility function to get the available device."""
@@ -72,7 +66,7 @@ else:
     logger.info(f"Loading pre-trained model {model_name}...")
     model = AutoModelForCausalLM.from_pretrained(model_name,
                                                  torch_dtype=torch.bfloat16,
-                                                 token=HF_TOKEN)
+                                                 token=HF_TOKEN, device_map="auto")
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN)
     # Check if pad_token is already in the tokenizer
     if tokenizer.pad_token is None:
@@ -113,9 +107,9 @@ elif dataset_path.endswith(".csv"):
         dataset.save_to_disk("data/datasets/queer_news.hf")
 else:
     dataset = load_dataset(dataset_path)
-
-if bool(int(os.getenv("REDUCE_DATASET", 1))):
-    reduced_size = int(os.getenv("REDUCE_DATASET_SIZE", 10000))
+reduce_dataset = bool(int(os.getenv("REDUCE_DATASET", 1)))
+reduced_size = int(os.getenv("REDUCE_DATASET_SIZE", 10000))
+if reduce_dataset:
     logger.info(f"Reducing dataset size to {reduced_size}")
     dataset['train'] = dataset['train'].select(range(reduced_size))
     dataset['validation'] = dataset['validation'].select(range(reduced_size))
@@ -128,10 +122,15 @@ logger.info(
     f"Dataset loading complete. Train size: {len(dataset['train'])}, Validation size: {len(dataset['validation'])}")
 train_dataset = dataset['train']
 eval_dataset = dataset['validation']
+output_dir = f"data/results/{mode}/models"
+if reduce_dataset:
+    output_dir = f"data/results/{mode}/reduced-{reduced_size}/models"
+
+os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 
 if deepspeed_path is not None:
     training_args = TrainingArguments(
-        output_dir=f"data/results/{mode}",
+        output_dir=output_dir,
         eval_strategy="epoch",
         disable_tqdm=False,
         num_train_epochs=epochs,
@@ -140,11 +139,13 @@ if deepspeed_path is not None:
         prediction_loss_only=True,
         report_to=["tensorboard"],
         weight_decay=0.01,
-        deepspeed=deepspeed_path
+        deepspeed=deepspeed_path,
+        save_steps=5000,
+        save_total_limit=2,
     )
 else:
     training_args = TrainingArguments(
-        output_dir=f"data/results/{mode}",
+        output_dir=output_dir,
         eval_strategy="epoch",
         disable_tqdm=False,
         num_train_epochs=epochs,
@@ -153,6 +154,8 @@ else:
         prediction_loss_only=True,
         report_to=["tensorboard"],
         weight_decay=0.01,
+        save_steps=5000,
+        save_total_limit=2,
 )
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -164,7 +167,6 @@ if mode == 'soft-prompt':
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
     )
-    trainer.save_model = lambda output_dir: custom_save_model(trainer, output_dir)
 
 else:
     trainer = Trainer(
@@ -180,7 +182,7 @@ trainer.train()
 logger.info("Training complete.")
 
 
-trainer.save_model(f'data/results/fine-tuning/models/')
+trainer.save_model(f'data/results/{mode}/models/')
 
 logger.info("Evaluation started...")
 trainer.evaluate()

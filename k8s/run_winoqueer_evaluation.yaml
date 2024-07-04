@@ -8,9 +8,9 @@ spec:
     spec:
       containers:
         - name: winoqueer-eval-gemma-soft-prompt
-          image: registry.datexis.com/s91000/thesis-tuning:0.0.3
+          image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
-          args: ["ls && cd data && pip3 install 'huggingface_hub[cli]' sentencepiece protobuf && huggingface-cli login --token $HF_TOKEN --add-to-git-credential &&  python code/evaluate_winoqueer.py" ]
+          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf &&  python code/evaluate_winoqueer.py" ]
 #          args: ["pip install ray[default] && nvidia-smi &&  ray start --node-ip-address=$MY_POD_IP --num-cpus=$MY_CPU_REQUEST --address=$RAY_HEAD_SERVICE_HOST:$RAY_HEAD_SERVICE_PORT_REDIS_PRIMARY --object-manager-port=12345 --node-manager-port=12346 && python train_default.py"]
           volumeMounts:
             - name: general-data
@@ -42,7 +42,7 @@ spec:
 #                'mistralai/Mistral-7B-v0.3'
 #            "openlm-research/open_llama_13b"
             - name: MODEL_PATH
-              value: "data/results/fine-tuning/models/"
+              value: "data/results/soft-prompt/models/gemma-7b.pt"
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
@@ -69,11 +69,11 @@ spec:
               value: 'data/results/soft-prompt/queer_news_trained_prompt_embeddings.pt'
           resources:
             requests:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 2
               cpu: 1
               memory: 30Gi
             limits:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 2
               memory: 60Gi
               cpu: 2
       imagePullSecrets:
