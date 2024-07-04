@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: winoqueer-eval-mistral
+  name: winoqueer-eval-gemma-soft-prompt
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: winoqueer-eval-misral
+        - name: winoqueer-eval-gemma-soft-prompt
           image: registry.datexis.com/s91000/thesis-tuning:0.0.3
           command: ["/bin/sh", "-c"]
           args: ["ls && cd data && pip3 install 'huggingface_hub[cli]' sentencepiece protobuf && huggingface-cli login --token $HF_TOKEN --add-to-git-credential &&  python code/evaluate_winoqueer.py" ]
@@ -36,7 +36,7 @@ spec:
                 resourceFieldRef:
                   resource: requests.cpu
             - name: MODEL_NAME
-              value: "mistralai/Mistral-7B-v0.3"
+              value: "google/gemma-7b"
 #              'google/gemma-7b'
 #              'meta-llama/Meta-Llama-3-8B'
 #                'mistralai/Mistral-7B-v0.3'
@@ -46,7 +46,7 @@ spec:
             - name: DATASET_PATH
               value: 'data/datasets/'
             - name: MODE
-              value: "pretrained"
+              value: "soft-prompt"
             - name: PROMPT_LENGTH
               value: "10"
             - name: OUTPUT_FILE
@@ -63,14 +63,16 @@ spec:
               value: '10000'
             - name: REDUCE_DATASET
               value: '0'
+            - name: SOFT_PROMPT_PATH
+              value: 'data/results/soft-prompt/queer_news_trained_prompt_embeddings.pt'
           resources:
             requests:
               nvidia.com/gpu: 1
               cpu: 1
-              memory: 60Gi
+              memory: 30Gi
             limits:
               nvidia.com/gpu: 1
-              memory: 120Gi
+              memory: 60Gi
               cpu: 2
       imagePullSecrets:
         - name: private-registry-auth

@@ -10,7 +10,12 @@ spec:
       volumeMounts:
         - name: general-data
           mountPath: /data
+        - name: root-temp
+          mountPath: /root
   volumes:
     - name: general-data
       persistentVolumeClaim:
         claimName: general-data
+    - name: root-temp
+      persistentVolumeClaim:
+        claimName: root-temp

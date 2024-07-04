@@ -5,3 +5,8 @@ tqdm~=4.62.3
 numpy~=1.23.5
 datasets~=2.19.2
 torch~=2.3.1
+accelerate
+tensorboardX
+deepspeed
+sentencepiece
+protobuf
