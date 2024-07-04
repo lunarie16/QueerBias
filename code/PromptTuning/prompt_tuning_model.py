@@ -64,25 +64,36 @@ class PromptTuningModel(nn.Module):
 
     def save_model(self, save_path):
         """Save the model with special handling for shared weights"""
-        save_path = f"{save_path}-{self.model_name}.pt"
         model_to_save = {
             'model_state_dict': self.model.state_dict(),
-            'soft_prompts': self.soft_prompts
+            'soft_prompts': self.soft_prompts.data
         }
         torch.save(model_to_save, save_path)
 
     @classmethod
     def load_model(cls, load_path, model_name, token, num_soft_prompts, device):
-        """Load the model with special handling for shared weights"""
-        load_path = f"{load_path}-{model_name}.pt"
-        checkpoint = torch.load(load_path)
-        model = cls(model_name, token, num_soft_prompts, device)
-        model.model.load_state_dict(checkpoint['model_state_dict'])
-        model.soft_prompts.data = checkpoint['soft_prompts'].data
-        # Ensure shared weights are correctly referenced
-        model.model.get_input_embeddings().weight = model.model.lm_head.weight = model.model.model.embed_tokens.weight
-        return model
+            """Load the model with special handling for shared weights"""
+            checkpoint = torch.load(load_path)
+            model = cls(model_name, token, num_soft_prompts, device)
+            model.model.load_state_dict(checkpoint['model_state_dict'])
+            model.soft_prompts.data = checkpoint['soft_prompts']
+            # Ensure shared weights are correctly referenced
+            model.model.get_input_embeddings().weight = model.model.lm_head.weight = model.model.model.embed_tokens.weight
+            return model
 
+def save_model_custom(trainer, output_dir):
+    """Custom save model function for Trainer"""
+    trainer.save_model(output_dir)
+    torch.save({
+        'soft_prompts': trainer.model.soft_prompts.data,
+    }, f"{output_dir}/soft_prompts.pth")
+
+def load_model_custom(model_name, token, num_soft_prompts, device, output_dir):
+    """Custom load model function for Trainer"""
+    model = PromptTuningModel(model_name, token, num_soft_prompts, device)
+    model.load_state_dict(torch.load(f"{output_dir}/pytorch_model.bin"))
+    model.soft_prompts.data = torch.load(f"{output_dir}/soft_prompts.pth")['soft_prompts']
+    return model
 
 
 

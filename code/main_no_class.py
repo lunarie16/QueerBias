@@ -20,6 +20,13 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 enable_caching()
 
+
+def custom_save_model(trainer, output_dir):
+    trainer.save_model(output_dir)
+    torch.save({
+        'soft_prompts': trainer.model.soft_prompts.data,
+    }, f"{output_dir}/soft_prompts.pth")
+
 @staticmethod
 def get_device() -> torch.device:
     """Utility function to get the available device."""
@@ -157,6 +164,8 @@ if mode == 'soft-prompt':
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
     )
+    trainer.save_model = lambda output_dir: custom_save_model(trainer, output_dir)
+
 else:
     trainer = Trainer(
         model=model,
@@ -171,7 +180,7 @@ trainer.train()
 logger.info("Training complete.")
 
 
-trainer.save_model('data/results/fine-tuning/models/')
+trainer.save_model(f'data/results/fine-tuning/models/')
 
 logger.info("Evaluation started...")
 trainer.evaluate()
