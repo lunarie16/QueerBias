@@ -56,7 +56,7 @@ class PromptTuningModel(nn.Module):
                                        device=input_ids.device)
             labels = torch.cat((prompt_labels, labels), dim=1)
         logger.debug(f"Labels: {labels}")
-        outputs = self.model.module(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels)
+        outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels)
         return outputs
 
     # def save_soft_prompts(self, file_path: str):

@@ -3,7 +3,7 @@ import os
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
-    AutoModelForCausalLM
+    AutoModelForCausalLM, logging
 from datasets import load_dataset, Dataset, DatasetDict, enable_caching
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModelDDP, SoftPromptTrainerDDP
@@ -14,6 +14,8 @@ import gc
 
 import torch.distributed as dist
 
+logging.set_verbosity_info()
+
 logger = getLogger(__name__)
 logger.setLevel("INFO")
 
@@ -23,6 +25,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 enable_caching()
 
 dist.init_process_group(backend='nccl')
+
 
 
 
@@ -67,7 +70,7 @@ if mode == 'soft-prompt':
     logger.info(f"Loading Prompt Tuning model {model_name}...")
     model = PromptTuningModelDDP(model_name=model_name, token=HF_TOKEN,
                               num_soft_prompts=prompt_length, device=device)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, use_fast=True)
     # Check if pad_token is already in the tokenizer
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -77,7 +80,7 @@ else:
     model = AutoModelForCausalLM.from_pretrained(model_name,
                                                  torch_dtype=torch.bfloat16,
                                                  token=HF_TOKEN).to(device)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, use_fast=True)
     # Check if pad_token is already in the tokenizer
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -115,6 +118,9 @@ elif dataset_path.endswith(".csv"):
         dataset.save_to_disk("data/datasets/queer_news.hf")
 else:
     dataset = load_dataset(dataset_path)
+
+output_dir = f"data/results/{mode}/models"
+
 reduce_dataset = bool(int(os.getenv("REDUCE_DATASET", 1)))
 reduced_size = int(os.getenv("REDUCE_DATASET_SIZE", 10000))
 if reduce_dataset:
@@ -124,19 +130,24 @@ if reduce_dataset:
     if len (dataset['validation']) > reduced_size:
         dataset['validation'] = dataset['validation'].select(range(reduced_size))
 
-logger.info("Dataset loaded. Now tokenizing...")
-#take small subset
-dataset = dataset.map(tokenize_function, batched=True)
-
-logger.info(
-    f"Dataset loading complete. Train size: {len(dataset['train'])}, Validation size: {len(dataset['validation'])}")
-train_dataset = dataset['train']
-eval_dataset = dataset['validation']
-output_dir = f"data/results/{mode}/models"
-if reduce_dataset:
     output_dir = f"data/results/{mode}/reduced-{reduced_size}/models"
 
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
+
+logger.info("Dataset loaded. Now tokenizing...")
+#take small subset
+if 'tokenized' not in dataset_path:
+    dataset = dataset.map(tokenize_function, batched=True)
+    dataset.save_to_disk("data/datasets/tokenized_queer_news.hf")
+# dataset = dataset.remove_columns_(dataset["train"].column_names)
+
+logger.info(
+    f"Dataset loading complete. Train size: {len(dataset['train'])}, Validation size: {len(dataset['validation'])}")
+train_dataset = dataset['train'].remove_columns(['title', 'url', 'media_name', 'text', 'error', 'sentence'])
+eval_dataset = dataset['validation'].remove_columns(['title', 'url', 'media_name', 'text', 'error', 'sentence'])
+
+logger.info(f"Column names {train_dataset.column_names}")
+
 
 if deepspeed_path is not None:
     training_args = TrainingArguments(
@@ -145,7 +156,7 @@ if deepspeed_path is not None:
         disable_tqdm=False,
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,
         learning_rate=learning_rate,
         prediction_loss_only=True,
         report_to=["tensorboard"],
@@ -153,6 +164,10 @@ if deepspeed_path is not None:
         deepspeed=deepspeed_path,
         save_steps=5000,
         save_total_limit=2,
+        dataloader_num_workers=4,
+        ddp_find_unused_parameters=False,
+        local_rank=local_rank,
+        # remove_unused_columns=False,
     )
 else:
     training_args = TrainingArguments(
@@ -162,7 +177,7 @@ else:
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,
         learning_rate=learning_rate,
         prediction_loss_only=True,
         report_to=["tensorboard"],
@@ -170,7 +185,9 @@ else:
         save_steps=10_000,
         save_total_limit=2,
         dataloader_num_workers=4,
-        ddp_find_unused_parameters=False
+        ddp_find_unused_parameters=False,
+        local_rank=local_rank,
+        remove_unused_columns=False,
 )
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -200,7 +217,7 @@ trainer.train()
 logger.info("Training complete.")
 
 
-trainer.save_model(f'data/results/{mode}/models/')
+trainer.save_model(output_dir)
 
 logger.info("Evaluation started...")
 trainer.evaluate()

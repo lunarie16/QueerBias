@@ -12,7 +12,6 @@ import time
 import pickle
 import gc
 
-import torch.distributed as dist
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -130,6 +129,8 @@ if reduce_dataset:
 
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 
+
+
 if deepspeed_path is not None:
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -145,6 +146,7 @@ if deepspeed_path is not None:
         deepspeed=deepspeed_path,
         save_steps=5000,
         save_total_limit=2,
+        remove_unused_columns=False,
     )
 else:
     training_args = TrainingArguments(
@@ -162,8 +164,9 @@ else:
         save_steps=10_000,
         save_total_limit=2,
         dataloader_num_workers=4,
-        ddp_find_unused_parameters=False
-)
+        ddp_find_unused_parameters=False,
+        remove_unused_columns=False,
+    )
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 if mode == 'soft-prompt':
@@ -175,6 +178,7 @@ if mode == 'soft-prompt':
         eval_dataset=eval_dataset,
     )
 
+
 else:
     trainer = Trainer(
         model=model,
@@ -184,7 +188,6 @@ else:
         eval_dataset=eval_dataset,
     )
 
-torch.cuda.empty_cache()
 
 logger.info("Training started...")
 start = time.time()

@@ -1,17 +1,17 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: soft-prompt-gemma-queer-news-2
+  name: soft-prompt-gemma-queer-news
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: soft-prompt-gemma-queer-news-2
+        - name: soft-prompt-gemma-queer-news
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
 #          command: ["python -m torch.distributed.launch --nproc_per_node=4  code/main_no_class.py"]
-          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && torchrun  --nproc_per_node=4 --nproc_per_node=4 --master_addr=$(MY_POD_IP) --master_port=29500 code/main_dp.py --trace-back" ]
+          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && torchrun  --nproc_per_node=4 --master_addr=$(MY_POD_IP) --master_port=29500 code/main_dp.py" ]
           volumeMounts:
             - name: general-data
               mountPath: /tuning/data
@@ -57,9 +57,9 @@ spec:
             - name: REDUCE_DATASET
               value: "0"
             - name: REDUCE_DATASET_SIZE
-              value: "1000000"
+              value: "10000"
             - name: BATCH_SIZE
-              value: "4"
+              value: "2"
             - name: EPOCHS
               value: "1"
             - name: LEARNING_RATE

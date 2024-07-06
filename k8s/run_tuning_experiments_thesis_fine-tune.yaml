@@ -1,16 +1,16 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: fine-tuning-gemma-queer-news
+  name: fine-tuning-mistral-queer-news
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: fine-tuning-gemma-queer-news
+        - name: fine-tuning-mistral-queer-news
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
-          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && python code/main_no_class.py" ]
+          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && torchrun  --nproc_per_node=6 --master_addr=$(MY_POD_IP) --master_port=29500 code/main_dp.py" ]
 #          args: [ "cd data && pip install &&  python code/segment_articles.py" ]
           #          args: ["cd data && export CUDA_HOME=/usr/local/cuda && export PATH=\"${CUDA_HOME}/bin:$PATH\" && python code/main_no_class.py"]
 
@@ -57,7 +57,7 @@ spec:
             - name: LM_MODEL_PATH
               value: "google/gemma-7b"
             - name: REDUCE_DATASET
-              value: "1"
+              value: "0"
             - name: REDUCE_DATASET_SIZE
               value: "10000"
             - name: BATCH_SIZE
@@ -69,10 +69,10 @@ spec:
 
           resources:
             requests:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 6
               cpu: 1
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 6
               cpu: 2
       imagePullSecrets:
         - name: private-registry-auth
