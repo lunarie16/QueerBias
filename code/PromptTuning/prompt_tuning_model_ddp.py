@@ -56,7 +56,7 @@ class PromptTuningModel(nn.Module):
                                        device=input_ids.device)
             labels = torch.cat((prompt_labels, labels), dim=1)
         logger.debug(f"Labels: {labels}")
-        outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels)
+        outputs = self.model.module(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels)
         return outputs
 
     # def save_soft_prompts(self, file_path: str):
@@ -105,11 +105,11 @@ class SoftPromptTrainer(Trainer):
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         # Create an optimizer for only the prompt embeddings
 
-        self.optimizer = optim.AdamW([self.model.soft_prompts], lr=self.args.learning_rate)
+        self.optimizer = optim.AdamW([self.model.module.soft_prompts], lr=self.args.learning_rate)
 
         self.lr_scheduler = self.create_scheduler(
             num_training_steps=num_training_steps, optimizer=self.optimizer
         )
 
     def save_model(self, output_dir, _internal_call=False):
-        self.model.save_model(output_dir, _internal_call)
+        self.model.module.save_model(output_dir, _internal_call)

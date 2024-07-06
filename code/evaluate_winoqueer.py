@@ -20,15 +20,15 @@ def get_log_prob_unigram_autoregressive(prev_token_ids, full_token_ids, tgt_idx,
     """Given a sequence of token ids, with one masked token, return the log probability of the masked token."""
     model = lm["model"]
     log_softmax = torch.nn.LogSoftmax(dim=0)
+    with torch.no_grad():
+        output = model(prev_token_ids)
+        hidden_states = output[0].squeeze(0)
 
-    output = model(prev_token_ids)
-    hidden_states = output[0].squeeze(0)
+        hs = hidden_states[-1]  # use logits for next word prediction
+        target_id = full_token_ids[0][tgt_idx]
+        log_probs = log_softmax(hs)[target_id]
 
-    hs = hidden_states[-1]  # use logits for next word prediction
-    target_id = full_token_ids[0][tgt_idx]
-    log_probs = log_softmax(hs)[target_id]
-
-    return log_probs
+        return log_probs
 
 def get_span(seq1, seq2):
     """
@@ -41,15 +41,12 @@ def get_span(seq1, seq2):
     matcher = difflib.SequenceMatcher(None, seq1, seq2)
     template1, template2 = [], []
     for op in matcher.get_opcodes():
-        # each op is a list of tuple:
-        # (operation, pro_idx_start, pro_idx_end, anti_idx_start, anti_idx_end)
-        # possible operation: replace, insert, equal
-        # https://docs.python.org/3/library/difflib.html
         if op[0] == 'equal':
             template1 += [x for x in range(op[1], op[2], 1)]
             template2 += [x for x in range(op[3], op[4], 1)]
 
     return template1, template2
+
 
 def mask_unigram(data, lm, n=1):
     """
@@ -62,18 +59,18 @@ def mask_unigram(data, lm, n=1):
     tokenizer = lm["tokenizer"]
     uncased = lm["uncased"]
 
-    sent1, sent2 = data["sent_x"], data["sent_y"]
+    sent1_token_ids, sent2_token_ids = data["sent_x"], data["sent_y"]
 
-    if uncased:
-        sent1 = sent1.lower()
-        sent2 = sent2.lower()
-
-    # tokenize
-    # append BOS token for conditional generation
-    sent1_token_ids = tokenizer.encode(tokenizer.bos_token + sent1, return_tensors='pt',
-                                       add_special_tokens=False).to(args.device)
-    sent2_token_ids = tokenizer.encode(tokenizer.bos_token + sent2, return_tensors='pt',
-                                       add_special_tokens=False).to(args.device)
+    # if uncased:
+    #     sent1 = sent1.lower()
+    #     sent2 = sent2.lower()
+    #
+    # # tokenize
+    # # append BOS token for conditional generation
+    # sent1_token_ids = tokenizer.encode(tokenizer.bos_token + sent1, return_tensors='pt',
+    #                                    add_special_tokens=False).to(args.device)
+    # sent2_token_ids = tokenizer.encode(tokenizer.bos_token + sent2, return_tensors='pt',
+    #                                    add_special_tokens=False).to(args.device)
 
     # get spans of non-changing tokens
     template1, template2 = get_span(sent1_token_ids[0], sent2_token_ids[0])
@@ -152,6 +149,11 @@ def evaluate(args):
     N = 0
     neutral = 0
     start = time.time()
+
+    # tokenize dataset columns
+    df_data['sent_x'] = df_data['sent_x'].apply(lambda x: tokenizer.encode(tokenizer.bos_token + x, return_tensors='pt', add_special_tokens=False).to(args.device))
+    df_data['sent_y'] = df_data['sent_y'].apply(lambda x: tokenizer.encode(tokenizer.bos_token + x, return_tensors='pt', add_special_tokens=False).to(args.device))
+
     with tqdm(total=len(df_data.index)) as pbar:
         for index, data in df_data.iterrows():
             bias = data['Gender_ID_x']

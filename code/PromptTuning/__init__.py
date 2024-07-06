@@ -1,2 +1,4 @@
 from .prompt_tuning_model import PromptTuningModel
 from .prompt_tuning_model import SoftPromptTrainer
+from .prompt_tuning_model_ddp import PromptTuningModel as PromptTuningModelDDP
+from .prompt_tuning_model_ddp import SoftPromptTrainer as SoftPromptTrainerDDP

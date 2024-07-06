@@ -1,19 +1,17 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: soft-prompt-llama-queer-news
+  name: soft-prompt-gemma-queer-news-2
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: soft-prompt-llama-queer-news
+        - name: soft-prompt-gemma-queer-news-2
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
-          args: ["cd data && cat code/PromptTuning/prompt_tuning_model.py && pip install accelerate tensorboardX sentencepiece protobuf && python code/main_no_class.py" ]
-#          args: [ "cd data && pip install &&  python code/segment_articles.py" ]
-          #          args: ["cd data && export CUDA_HOME=/usr/local/cuda && export PATH=\"${CUDA_HOME}/bin:$PATH\" && python code/main_no_class.py"]
-
+#          command: ["python -m torch.distributed.launch --nproc_per_node=4  code/main_no_class.py"]
+          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && torchrun  --nproc_per_node=4 --nproc_per_node=4 --master_addr=$(MY_POD_IP) --master_port=29500 code/main_dp.py --trace-back" ]
           volumeMounts:
             - name: general-data
               mountPath: /tuning/data
@@ -37,7 +35,7 @@ spec:
                 resourceFieldRef:
                   resource: requests.cpu
             - name: MODEL_NAME
-              value: 'meta-llama/Meta-Llama-3-8B'
+              value: 'google/gemma-7b'
               #              'google/gemma-7b'
               #              'meta-llama/Meta-Llama-3-8B'
               #                'mistralai/Mistral-7B-v0.3'
@@ -59,26 +57,27 @@ spec:
             - name: REDUCE_DATASET
               value: "0"
             - name: REDUCE_DATASET_SIZE
-              value: "10000"
+              value: "1000000"
             - name: BATCH_SIZE
-              value: "8"
+              value: "4"
             - name: EPOCHS
               value: "1"
             - name: LEARNING_RATE
               value: "0.00002"
-
+            - name: NCCL_DEBUG
+              value: INFO
           resources:
             requests:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 4
               cpu: 1
             limits:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 4
               cpu: 2
       imagePullSecrets:
         - name: private-registry-auth
       restartPolicy: Never
       nodeSelector:
-        gpu: h100
+        gpu: a100
       volumes:
         - name: general-data
           persistentVolumeClaim:

@@ -6,7 +6,7 @@ from transformers import Trainer, TrainingArguments, DataCollatorForLanguageMode
     AutoModelForCausalLM
 from datasets import load_dataset, Dataset, DatasetDict, enable_caching
 from dotenv import load_dotenv
-from PromptTuning import PromptTuningModel, SoftPromptTrainer
+from PromptTuning import PromptTuningModelDDP, SoftPromptTrainerDDP
 from logging import getLogger
 import time
 import pickle
@@ -21,6 +21,8 @@ load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 enable_caching()
+
+dist.init_process_group(backend='nccl')
 
 
 
@@ -52,6 +54,10 @@ epochs = int(os.getenv("EPOCHS", 3))
 device = get_device()
 deepspeed_path = os.getenv("DEEPSPEED_PATH", None)
 
+local_rank = int(os.environ['LOCAL_RANK'])
+torch.cuda.set_device(local_rank)
+device = torch.device('cuda', local_rank)
+
 gc.collect()
 
 
@@ -59,7 +65,7 @@ gc.collect()
 """Loads the model and tokenizer based on the provided mode."""
 if mode == 'soft-prompt':
     logger.info(f"Loading Prompt Tuning model {model_name}...")
-    model = PromptTuningModel(model_name=model_name, token=HF_TOKEN,
+    model = PromptTuningModelDDP(model_name=model_name, token=HF_TOKEN,
                               num_soft_prompts=prompt_length, device=device)
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN)
     # Check if pad_token is already in the tokenizer
@@ -77,6 +83,8 @@ else:
         tokenizer.pad_token = tokenizer.eos_token
 
     model.resize_token_embeddings(len(tokenizer))
+
+model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
 
 """Loads and splits the dataset into training and evaluation sets."""
@@ -167,7 +175,7 @@ else:
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 if mode == 'soft-prompt':
-    trainer = SoftPromptTrainer(
+    trainer = SoftPromptTrainerDDP(
         model=model,
         args=training_args,
         data_collator=data_collator,

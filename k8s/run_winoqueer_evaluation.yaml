@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: winoqueer-eval-gemma-soft-prompt
+  name: winoqueer-eval-gemma-soft-prompt-fast
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: winoqueer-eval-gemma-soft-prompt
+        - name: winoqueer-eval-gemma-soft-prompt-fast
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
           args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf &&  python code/evaluate_winoqueer.py" ]
@@ -69,11 +69,11 @@ spec:
               value: 'data/results/soft-prompt/queer_news_trained_prompt_embeddings.pt'
           resources:
             requests:
-              nvidia.com/gpu: 2
+              nvidia.com/gpu: 1
               cpu: 1
               memory: 30Gi
             limits:
-              nvidia.com/gpu: 2
+              nvidia.com/gpu: 1
               memory: 60Gi
               cpu: 2
       imagePullSecrets:
