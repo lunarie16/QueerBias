@@ -2,6 +2,7 @@ import os
 import torch
 from torch import nn, optim
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer
+from transformers.optimization import Adafactor, AdafactorSchedule
 import logging
 
 # Set up logging
@@ -87,7 +88,7 @@ class PromptTuningModel(nn.Module):
     def load_model(cls, load_path, model_name, token, num_soft_prompts, device):
             """Load the model with special handling for shared weights"""
             logger.info(f"Loading model from {load_path}")
-            checkpoint = torch.load(load_path)
+            checkpoint = torch.load(load_path, map_location='cuda:0')
             model = cls(model_name, token, num_soft_prompts, device)
             model.model.load_state_dict(checkpoint['model_state_dict'])
             model.soft_prompts.data = checkpoint['soft_prompts']
@@ -104,12 +105,10 @@ class SoftPromptTrainer(Trainer):
         super().__init__(*args, **kwargs)
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         # Create an optimizer for only the prompt embeddings
+        learning_rate = float(os.getenv("LEARNING_RATE", 1e-5))
+        self.optimizer = Adafactor([self.model.module.soft_prompts], scale_parameter=True, clip_threshold=1.0, warmup_init=True, lr=learning_rate)
 
-        self.optimizer = optim.AdamW([self.model.module.soft_prompts], lr=self.args.learning_rate)
-
-        self.lr_scheduler = self.create_scheduler(
-            num_training_steps=num_training_steps, optimizer=self.optimizer
-        )
+        self.lr_scheduler = AdafactorSchedule(self.optimizer)
 
     def save_model(self, output_dir, _internal_call=False):
         self.model.module.save_model(output_dir, _internal_call)

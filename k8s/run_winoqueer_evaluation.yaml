@@ -46,7 +46,7 @@ spec:
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'data/datasets/'
+              value: 'data/datasets/winoqueer_gender_identity.csv'
             - name: MODE
               value: "soft-prompt"
             - name: PROMPT_LENGTH
@@ -80,7 +80,7 @@ spec:
         - name: private-registry-auth
       restartPolicy: Never
       nodeSelector:
-        gpu: a100
+        gpu: v100
       volumes:
         - name: general-data
           persistentVolumeClaim:

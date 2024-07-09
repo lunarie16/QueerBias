@@ -144,7 +144,7 @@ if deepspeed_path is not None:
         report_to=["tensorboard"],
         weight_decay=0.01,
         deepspeed=deepspeed_path,
-        save_steps=5000,
+        save_steps=1000,
         save_total_limit=2,
         remove_unused_columns=False,
     )
@@ -161,7 +161,7 @@ else:
         prediction_loss_only=True,
         report_to=["tensorboard"],
         weight_decay=0.01,
-        save_steps=10_000,
+        save_steps=1000,
         save_total_limit=2,
         dataloader_num_workers=4,
         ddp_find_unused_parameters=False,

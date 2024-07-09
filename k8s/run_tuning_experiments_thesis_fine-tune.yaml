@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: fine-tuning-mistral-queer-news
+  name: fine-tuning-gemma-queer-news
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: fine-tuning-mistral-queer-news
+        - name: fine-tuning-gemma-queer-news
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
           args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && torchrun  --nproc_per_node=6 --master_addr=$(MY_POD_IP) --master_port=29500 code/main_dp.py" ]
@@ -45,7 +45,7 @@ spec:
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'data/datasets/queer_news.hf'
+              value: 'data/datasets/tokenized_queer_news.hf'
             - name: MODE
               value: "fine-tuning"
             - name: PROMPT_LENGTH
@@ -61,11 +61,17 @@ spec:
             - name: REDUCE_DATASET_SIZE
               value: "10000"
             - name: BATCH_SIZE
-              value: "2"
+              value: "4"
             - name: EPOCHS
               value: "1"
             - name: LEARNING_RATE
               value: "0.00002"
+            - name: NCCL_DEBUG
+              value: INFO
+            - name: NUM_GPU
+              value: "6"
+            - name: GRADIENT_ACCUMULATION_STEPS
+              value: "16"
 
           resources:
             requests:

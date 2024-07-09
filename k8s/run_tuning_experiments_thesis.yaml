@@ -1,16 +1,16 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: soft-prompt-gemma-queer-news
+  name: soft-prompt-gemma-queer-news-bs8
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: soft-prompt-gemma-queer-news
+        - name: soft-prompt-gemma-queer-news-bs8
           image: registry.datexis.com/s91000/thesis-tuning:0.0.9
           command: ["/bin/sh", "-c"]
-#          command: ["python -m torch.distributed.launch --nproc_per_node=4  code/main_no_class.py"]
+#          command: ["python -m torch.distributed.launch --nproc_per_node=6  code/main_no_class.py"]
           args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf && torchrun  --nproc_per_node=4 --master_addr=$(MY_POD_IP) --master_port=29500 code/main_dp.py" ]
           volumeMounts:
             - name: general-data
@@ -43,7 +43,7 @@ spec:
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'data/datasets/queer_news.hf'
+              value: 'data/datasets/tokenized_queer_news.hf'
             - name: MODE
               value: "soft-prompt"
             - name: PROMPT_LENGTH
@@ -59,13 +59,17 @@ spec:
             - name: REDUCE_DATASET_SIZE
               value: "10000"
             - name: BATCH_SIZE
-              value: "2"
+              value: "8"
             - name: EPOCHS
               value: "1"
             - name: LEARNING_RATE
               value: "0.00002"
             - name: NCCL_DEBUG
               value: INFO
+            - name: NUM_GPU
+              value: "4"
+            - name: GRADIENT_ACCUMULATION_STEPS
+              value: "16"
           resources:
             requests:
               nvidia.com/gpu: 4

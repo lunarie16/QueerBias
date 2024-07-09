@@ -4,6 +4,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
     AutoModelForCausalLM, logging
+from transformers.optimization import Adafactor, AdafactorSchedule
 from datasets import load_dataset, Dataset, DatasetDict, enable_caching
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModelDDP, SoftPromptTrainerDDP
@@ -39,13 +40,13 @@ def get_device() -> torch.device:
     else:
         return torch.device("cpu")
 
-def tokenize_function(example):
-    if 'sentence' in example:
-        return tokenizer(example['sentence'], max_length=512, truncation=True,
-                         padding='max_length')
-    elif 'original' in example:
-        return tokenizer(example['original'], max_length=512, truncation=True,
-                         padding='max_length')
+# def tokenize_function(example):
+#     if 'sentence' in example:
+#         return tokenizer(example['sentence'], max_length=512, truncation=True,
+#                          padding='max_length')
+#     elif 'original' in example:
+#         return tokenizer(example['original'], max_length=512, truncation=True,
+#                          padding='max_length')
 
 model_name = os.getenv("MODEL_NAME", 'google/gemma-7b')
 dataset_path = os.getenv("DATASET_PATH", 'data/datasets/queer_news.pkl')
@@ -56,6 +57,8 @@ learning_rate = float(os.getenv("LEARNING_RATE", 1e-5))
 epochs = int(os.getenv("EPOCHS", 3))
 device = get_device()
 deepspeed_path = os.getenv("DEEPSPEED_PATH", None)
+num_gpu = int(os.getenv("NUM_GPU", 1))
+gradient_accum_steps = int(os.getenv("GRADIENT_ACCUMULATION_STEPS", 8))
 
 local_rank = int(os.environ['LOCAL_RANK'])
 torch.cuda.set_device(local_rank)
@@ -86,7 +89,7 @@ else:
         tokenizer.pad_token = tokenizer.eos_token
 
     model.resize_token_embeddings(len(tokenizer))
-
+model = model.half()
 model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
 
@@ -133,12 +136,12 @@ if reduce_dataset:
     output_dir = f"data/results/{mode}/reduced-{reduced_size}/models"
 
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-
-logger.info("Dataset loaded. Now tokenizing...")
+#
+# logger.info("Dataset loaded. Now tokenizing...")
 #take small subset
-if 'tokenized' not in dataset_path:
-    dataset = dataset.map(tokenize_function, batched=True)
-    dataset.save_to_disk("data/datasets/tokenized_queer_news.hf")
+# if 'tokenized' not in dataset_path:
+#     dataset = dataset.map(tokenize_function, batched=True)
+#     dataset.save_to_disk("data/datasets/tokenized_queer_news.hf")
 # dataset = dataset.remove_columns_(dataset["train"].column_names)
 
 logger.info(
@@ -149,6 +152,7 @@ eval_dataset = dataset['validation'].remove_columns(['title', 'url', 'media_name
 logger.info(f"Column names {train_dataset.column_names}")
 
 
+
 if deepspeed_path is not None:
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -156,7 +160,7 @@ if deepspeed_path is not None:
         disable_tqdm=False,
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=gradient_accum_steps,
         learning_rate=learning_rate,
         prediction_loss_only=True,
         report_to=["tensorboard"],
@@ -164,7 +168,7 @@ if deepspeed_path is not None:
         deepspeed=deepspeed_path,
         save_steps=5000,
         save_total_limit=2,
-        dataloader_num_workers=4,
+        dataloader_num_workers=num_gpu,
         ddp_find_unused_parameters=False,
         local_rank=local_rank,
         # remove_unused_columns=False,
@@ -177,17 +181,19 @@ else:
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=gradient_accum_steps,
         learning_rate=learning_rate,
         prediction_loss_only=True,
         report_to=["tensorboard"],
         weight_decay=0.01,
-        save_steps=10_000,
+        save_steps=1000,
         save_total_limit=2,
-        dataloader_num_workers=4,
+        dataloader_num_workers=num_gpu,
         ddp_find_unused_parameters=False,
         local_rank=local_rank,
         remove_unused_columns=False,
+        # fp16=True,
+        optim="adafactor"
 )
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -201,12 +207,16 @@ if mode == 'soft-prompt':
     )
 
 else:
+    optimizer = Adafactor(model.parameters(), scale_parameter=True, clip_threshold=1.0,
+                          warmup_init=True, lr=learning_rate)
+    lr_scheduler = AdafactorSchedule(optimizer)
     trainer = Trainer(
         model=model,
         args=training_args,
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
+        optimizers=(optimizer, lr_scheduler)
     )
 
 torch.cuda.empty_cache()
