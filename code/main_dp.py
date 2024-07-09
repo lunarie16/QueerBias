@@ -28,7 +28,7 @@ enable_caching()
 dist.init_process_group(backend='nccl')
 
 
-
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 @staticmethod
 def get_device() -> torch.device:
@@ -207,8 +207,8 @@ if mode == 'soft-prompt':
     )
 
 else:
-    optimizer = Adafactor(model.parameters(), scale_parameter=True, clip_threshold=1.0,
-                          warmup_init=True, lr=learning_rate)
+    optimizer = Adafactor(model.parameters(), scale_parameter=True,
+                          warmup_init=True, lr=None, relative_step=True)
     lr_scheduler = AdafactorSchedule(optimizer)
     trainer = Trainer(
         model=model,

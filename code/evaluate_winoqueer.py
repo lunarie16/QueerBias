@@ -5,7 +5,7 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm import tqdm
 from dotenv import load_dotenv
-from PromptTuning import PromptTuningModel
+from PromptTuning import PromptTuningModelDDP
 import difflib
 import time
 import csv
@@ -108,7 +108,7 @@ def mask_unigram(data, lm, n=1):
 def evaluate(args):
     # Load model and tokenizer based on mode
     if args.mode == "soft-prompt":
-        model = PromptTuningModel.load_model(args.model_path, model_name=args.model_name, token=args.token,
+        model = PromptTuningModelDDP.load_model(args.model_path, model_name=args.model_name, token=args.token,
                                     num_soft_prompts=args.prompt_length, device=args.device)
 
         tokenizer = AutoTokenizer.from_pretrained(args.model_name)
