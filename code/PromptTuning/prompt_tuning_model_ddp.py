@@ -48,7 +48,6 @@ class PromptTuningModel(nn.Module):
         self.embedding_size = self.embedding_layer.embedding_dim
 
 
-
         self.prompt_length = num_soft_prompts
         self.soft_prompts = nn.Parameter(self.initialize_embedding(self.embedding_layer, self.prompt_length)).to(self.device)
         logger.info(f"Soft prompts initialized with shape: {self.soft_prompts.size()}")
@@ -80,26 +79,16 @@ class PromptTuningModel(nn.Module):
             prompt_embedding = self.soft_prompts[prompt_ids]
             inputs_embeds = self.embedding_layer(input_ids)
             inputs_embeds = torch.cat((prompt_embedding, inputs_embeds), dim=1)
-            print(f"input_embds: {inputs_embeds.dtype}")
-            logger.debug(f"Prompt embedding shape: {prompt_embedding.shape}")
-            logger.debug(f"Inputs embeds shape: {inputs_embeds.shape}")
-            logger.debug(f"Input embeds type {inputs_embeds.dtype}")
 
             if attention_mask is not None:
                 prompt_attention_mask = torch.ones((batch_size, self.prompt_length),
                                                    device=input_ids.device)
-                logger.debug(f"Prompt attention mask shape: {prompt_attention_mask.shape}")
                 attention_mask = torch.cat((prompt_attention_mask, attention_mask), dim=1)
-                print(f"attention_mask: {attention_mask.dtype}")
-                logger.debug(f"Concatenated attention mask shape: {attention_mask.shape}")
 
             if labels is not None:
                 prompt_labels = torch.full((batch_size, self.prompt_length), -100, dtype=torch.long,
                                            device=input_ids.device)
-                logger.debug(f"Prompt labels shape: {prompt_labels.shape}")
-                logger.info(f"labels: {labels.dtype}, prompt_labels: {prompt_labels.dtype}")
                 labels = torch.cat((prompt_labels, labels), dim=1)
-                print(f"labels: {labels.dtype}")
                 logger.debug(f"Concatenated labels shape: {labels.shape}")
 
             # print types of each input
@@ -108,90 +97,54 @@ class PromptTuningModel(nn.Module):
                                  labels=labels)
                 return outputs
         else:
-            try:
-                # Move inputs to the device
-                input_ids = input_ids.to(self.device)
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(self.device)
-                if labels is not None:
-                    labels = labels.to(self.device)
+            # Move inputs to the device
+            input_ids = input_ids.to(self.device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(self.device)
+            if labels is not None:
+                labels = labels.to(self.device)
 
-                batch_size = input_ids.size(0)
-                logger.debug(f"Batch size: {batch_size}, Prompt length: {self.prompt_length}")
+            batch_size = input_ids.size(0)
 
-                # Check the dimensions of soft_prompts
-                soft_prompts_size = self.soft_prompts.size(0)
-                if soft_prompts_size < self.prompt_length:
-                    raise ValueError(
-                        f"Prompt length {self.prompt_length} exceeds the size of soft_prompts {soft_prompts_size}")
+            # Check the dimensions of soft_prompts
+            soft_prompts_size = self.soft_prompts.size(0)
 
-                # Create prompt embeddings
-                prompt_ids = torch.arange(self.prompt_length,
-                                          device=input_ids.device).unsqueeze(0).expand(
-                    batch_size, -1)
-                logger.debug(f"Prompt IDs shape: {prompt_ids.shape}")
+            # Create prompt embeddings
+            prompt_ids = torch.arange(self.prompt_length,
+                                      device=input_ids.device).unsqueeze(0).expand(
+                batch_size, -1)
 
-                # Check the maximum index of prompt_ids
-                max_prompt_id = torch.max(prompt_ids).item()
-                if max_prompt_id >= soft_prompts_size:
-                    raise IndexError(
-                        f"Max prompt id {max_prompt_id} is out of bounds for soft_prompts with size {soft_prompts_size}")
+            # Check the maximum index of prompt_ids
+            max_prompt_id = torch.max(prompt_ids).item()
+            if max_prompt_id >= soft_prompts_size:
+                raise IndexError(
+                    f"Max prompt id {max_prompt_id} is out of bounds for soft_prompts with size {soft_prompts_size}")
 
-                prompt_embedding = self.soft_prompts[prompt_ids]
-                logger.debug(f"Prompt embedding shape: {prompt_embedding.shape}")
+            prompt_embedding = self.soft_prompts[prompt_ids]
 
-                inputs_embeds = self.embedding_layer(input_ids)
-                logger.debug(f"Inputs embeds shape: {inputs_embeds.shape}")
+            inputs_embeds = self.embedding_layer(input_ids)
 
-                inputs_embeds = torch.cat((prompt_embedding, inputs_embeds), dim=1)
-                logger.debug(f"Concatenated inputs embeds shape: {inputs_embeds.shape}")
+            inputs_embeds = torch.cat((prompt_embedding, inputs_embeds), dim=1)
 
-                # Adjust attention mask if provided
-                if attention_mask is not None:
-                    prompt_attention_mask = torch.ones((batch_size, self.prompt_length),
-                                                       device=input_ids.device)
-                    logger.debug(f"Prompt attention mask shape: {prompt_attention_mask.shape}")
+            # Adjust attention mask if provided
+            if attention_mask is not None:
+                prompt_attention_mask = torch.ones((batch_size, self.prompt_length),
+                                                   device=input_ids.device)
 
-                    attention_mask = torch.cat((prompt_attention_mask, attention_mask), dim=1)
-                    logger.debug(f"Concatenated attention mask shape: {attention_mask.shape}")
+                attention_mask = torch.cat((prompt_attention_mask, attention_mask), dim=1)
 
-                # Adjust labels if provided
-                if labels is not None:
-                    prompt_labels = torch.full((batch_size, self.prompt_length), -100,
-                                               dtype=torch.long, device=input_ids.device)
-                    logger.debug(f"Prompt labels shape: {prompt_labels.shape}")
+            # Adjust labels if provided
+            if labels is not None:
+                prompt_labels = torch.full((batch_size, self.prompt_length), -100,
+                                           dtype=torch.long, device=input_ids.device)
 
-                    labels = torch.cat((prompt_labels, labels), dim=1)
-                    logger.debug(f"Concatenated labels shape: {labels.shape}")
+                labels = torch.cat((prompt_labels, labels), dim=1)
 
-                # Model forward pass
-                outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask,
-                                     labels=labels)
-                return outputs
+            # Model forward pass
+            outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+                                 labels=labels)
+            return outputs
 
-            except RuntimeError as e:
-                logger.error(f"RuntimeError: {e}")
-                logger.error(f"Input IDs shape: {input_ids.shape}")
-                if attention_mask is not None:
-                    logger.error(f"Attention mask shape: {attention_mask.shape}")
-                if labels is not None:
-                    logger.error(f"Labels shape: {labels.shape}")
-                raise e
-            except Exception as e:
-                logger.error(f"Exception: {e}")
-                raise e
-
-
-
-    # def save_soft_prompts(self, file_path: str):
-    #     torch.save(self.soft_prompts, file_path)
-    #
-    # def load_soft_prompts(self, file_path: str = None):
-    #     if not file_path:
-    #         dataset_path = 'queer_news'
-    #         file_path = f'data/results/soft-prompt/{dataset_path}_trained_prompt_embeddings.pt'
-    #     self.soft_prompts = torch.load(file_path).to(self.device)
-    #     self.soft_prompts = nn.Parameter(self.soft_prompts)
 
     def save_model(self, save_path, _internal_call=False):
         """Save the model with special handling for shared weights"""
