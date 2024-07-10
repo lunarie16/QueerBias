@@ -1,7 +1,7 @@
 import os
 import torch
 from torch import nn, optim
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, GenerationConfig
 from transformers.optimization import Adafactor, AdafactorSchedule
 import logging
 
@@ -14,6 +14,25 @@ class PromptTuningModel(nn.Module):
         super(PromptTuningModel, self).__init__()
         self.device = device
         self.model_name = model_name
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        self.generation_config = GenerationConfig.from_pretrained(model_name, token=token,
+                                                                  use_cache=True)
+        # Check if pad_token is already in the self.tokenizer
+        if self.tokenizer.pad_token is None:
+            pad_token_id = getattr(self.generation_config, 'pad_token_id', self.tokenizer.eos_token_id)
+            logger.info(f"Pad token id: {pad_token_id}")
+            if pad_token_id is not None:
+                pad_token = self.tokenizer.convert_ids_to_tokens([pad_token_id])[0]
+                self.tokenizer.pad_token_id = pad_token_id
+                self.tokenizer.pad_token = pad_token
+            else:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+                self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+                logger.info(f"Pad token: {self.tokenizer.pad_token}, Pad token id: {self.tokenizer.pad_token_id}")
+
+
         num_devices = torch.cuda.device_count()
         if num_devices == 1:
             self.device = torch.device('cuda:0')
@@ -22,12 +41,18 @@ class PromptTuningModel(nn.Module):
         else:
             self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16,
                                                           token=token).to(self.device)
+        if model_name != 'google/gemma-7b':
+            self.model.resize_token_embeddings(len(self.tokenizer))
+            logger.info(f"Resized token embeddings to {len(self.tokenizer)}")
         self.embedding_layer = self.model.get_input_embeddings()
         self.embedding_size = self.embedding_layer.embedding_dim
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+
+
         self.prompt_length = num_soft_prompts
         self.soft_prompts = nn.Parameter(self.initialize_embedding(self.embedding_layer, self.prompt_length)).to(self.device)
         logger.info(f"Soft prompts initialized with shape: {self.soft_prompts.size()}")
+
 
         # Freeze model parameters
         for param in self.model.parameters():
@@ -40,7 +65,7 @@ class PromptTuningModel(nn.Module):
         return torch.FloatTensor(n_tokens, wte.weight.size(1)).uniform_(-random_range, random_range)
 
     def forward(self, input_ids, attention_mask=None, labels=None):
-        try:
+        if self.model_name == 'google/gemma-7b':
             input_ids = input_ids.to(self.device)
             if attention_mask is not None:
                 attention_mask = attention_mask.to(self.device)
@@ -55,34 +80,108 @@ class PromptTuningModel(nn.Module):
             prompt_embedding = self.soft_prompts[prompt_ids]
             inputs_embeds = self.embedding_layer(input_ids)
             inputs_embeds = torch.cat((prompt_embedding, inputs_embeds), dim=1)
+            print(f"input_embds: {inputs_embeds.dtype}")
             logger.debug(f"Prompt embedding shape: {prompt_embedding.shape}")
             logger.debug(f"Inputs embeds shape: {inputs_embeds.shape}")
+            logger.debug(f"Input embeds type {inputs_embeds.dtype}")
 
             if attention_mask is not None:
                 prompt_attention_mask = torch.ones((batch_size, self.prompt_length),
                                                    device=input_ids.device)
                 logger.debug(f"Prompt attention mask shape: {prompt_attention_mask.shape}")
                 attention_mask = torch.cat((prompt_attention_mask, attention_mask), dim=1)
+                print(f"attention_mask: {attention_mask.dtype}")
                 logger.debug(f"Concatenated attention mask shape: {attention_mask.shape}")
 
             if labels is not None:
                 prompt_labels = torch.full((batch_size, self.prompt_length), -100, dtype=torch.long,
                                            device=input_ids.device)
                 logger.debug(f"Prompt labels shape: {prompt_labels.shape}")
+                logger.info(f"labels: {labels.dtype}, prompt_labels: {prompt_labels.dtype}")
                 labels = torch.cat((prompt_labels, labels), dim=1)
+                print(f"labels: {labels.dtype}")
                 logger.debug(f"Concatenated labels shape: {labels.shape}")
 
-            outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels)
-            return outputs
+            # print types of each input
+            with torch.cuda.amp.autocast():
+                outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+                                 labels=labels)
+                return outputs
+        else:
+            try:
+                # Move inputs to the device
+                input_ids = input_ids.to(self.device)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(self.device)
+                if labels is not None:
+                    labels = labels.to(self.device)
 
-        except RuntimeError as e:
-            logger.error(f"RuntimeError: {e}")
-            logger.error(f"Input IDs shape: {input_ids.shape}")
-            if attention_mask is not None:
-                logger.error(f"Attention mask shape: {attention_mask.shape}")
-            if labels is not None:
-                logger.error(f"Labels shape: {labels.shape}")
-            raise e
+                batch_size = input_ids.size(0)
+                logger.debug(f"Batch size: {batch_size}, Prompt length: {self.prompt_length}")
+
+                # Check the dimensions of soft_prompts
+                soft_prompts_size = self.soft_prompts.size(0)
+                if soft_prompts_size < self.prompt_length:
+                    raise ValueError(
+                        f"Prompt length {self.prompt_length} exceeds the size of soft_prompts {soft_prompts_size}")
+
+                # Create prompt embeddings
+                prompt_ids = torch.arange(self.prompt_length,
+                                          device=input_ids.device).unsqueeze(0).expand(
+                    batch_size, -1)
+                logger.debug(f"Prompt IDs shape: {prompt_ids.shape}")
+
+                # Check the maximum index of prompt_ids
+                max_prompt_id = torch.max(prompt_ids).item()
+                if max_prompt_id >= soft_prompts_size:
+                    raise IndexError(
+                        f"Max prompt id {max_prompt_id} is out of bounds for soft_prompts with size {soft_prompts_size}")
+
+                prompt_embedding = self.soft_prompts[prompt_ids]
+                logger.debug(f"Prompt embedding shape: {prompt_embedding.shape}")
+
+                inputs_embeds = self.embedding_layer(input_ids)
+                logger.debug(f"Inputs embeds shape: {inputs_embeds.shape}")
+
+                inputs_embeds = torch.cat((prompt_embedding, inputs_embeds), dim=1)
+                logger.debug(f"Concatenated inputs embeds shape: {inputs_embeds.shape}")
+
+                # Adjust attention mask if provided
+                if attention_mask is not None:
+                    prompt_attention_mask = torch.ones((batch_size, self.prompt_length),
+                                                       device=input_ids.device)
+                    logger.debug(f"Prompt attention mask shape: {prompt_attention_mask.shape}")
+
+                    attention_mask = torch.cat((prompt_attention_mask, attention_mask), dim=1)
+                    logger.debug(f"Concatenated attention mask shape: {attention_mask.shape}")
+
+                # Adjust labels if provided
+                if labels is not None:
+                    prompt_labels = torch.full((batch_size, self.prompt_length), -100,
+                                               dtype=torch.long, device=input_ids.device)
+                    logger.debug(f"Prompt labels shape: {prompt_labels.shape}")
+
+                    labels = torch.cat((prompt_labels, labels), dim=1)
+                    logger.debug(f"Concatenated labels shape: {labels.shape}")
+
+                # Model forward pass
+                outputs = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+                                     labels=labels)
+                return outputs
+
+            except RuntimeError as e:
+                logger.error(f"RuntimeError: {e}")
+                logger.error(f"Input IDs shape: {input_ids.shape}")
+                if attention_mask is not None:
+                    logger.error(f"Attention mask shape: {attention_mask.shape}")
+                if labels is not None:
+                    logger.error(f"Labels shape: {labels.shape}")
+                raise e
+            except Exception as e:
+                logger.error(f"Exception: {e}")
+                raise e
+
+
 
     # def save_soft_prompts(self, file_path: str):
     #     torch.save(self.soft_prompts, file_path)

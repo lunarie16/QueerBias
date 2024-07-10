@@ -3,7 +3,7 @@ import os
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
-    AutoModelForCausalLM, logging
+    AutoModelForCausalLM, logging, GenerationConfig
 from transformers.optimization import Adafactor, AdafactorSchedule
 from datasets import load_dataset, Dataset, DatasetDict, enable_caching
 from dotenv import load_dotenv
@@ -29,6 +29,7 @@ dist.init_process_group(backend='nccl')
 
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 @staticmethod
 def get_device() -> torch.device:
@@ -67,16 +68,12 @@ device = torch.device('cuda', local_rank)
 gc.collect()
 
 
-
 """Loads the model and tokenizer based on the provided mode."""
 if mode == 'soft-prompt':
     logger.info(f"Loading Prompt Tuning model {model_name}...")
     model = PromptTuningModelDDP(model_name=model_name, token=HF_TOKEN,
                               num_soft_prompts=prompt_length, device=device)
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=HF_TOKEN, use_fast=True)
-    # Check if pad_token is already in the tokenizer
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer = model.tokenizer
 
 else:
     logger.info(f"Loading pre-trained model {model_name}...")
@@ -137,11 +134,12 @@ if reduce_dataset:
 
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 #
-# logger.info("Dataset loaded. Now tokenizing...")
+logger.info("Dataset loaded. Now tokenizing...")
 #take small subset
 # if 'tokenized' not in dataset_path:
 #     dataset = dataset.map(tokenize_function, batched=True)
-#     dataset.save_to_disk("data/datasets/tokenized_queer_news.hf")
+#     short_model_name = model_name.split("/")[-1]
+#     dataset.save_to_disk(f"data/datasets/tokenized_{short_model_name}_queer_news.hf")
 # dataset = dataset.remove_columns_(dataset["train"].column_names)
 
 logger.info(

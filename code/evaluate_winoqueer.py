@@ -21,11 +21,14 @@ def get_log_prob_unigram_autoregressive(prev_token_ids, full_token_ids, tgt_idx,
     model = lm["model"]
     log_softmax = torch.nn.LogSoftmax(dim=0)
     with torch.no_grad():
+        prev_token_ids = prev_token_ids.to(torch.long).to(args.device)
+        full_token_ids = full_token_ids.to(torch.long).to(args.device)
+        logger.info(f"prev_token_ids types: {prev_token_ids.dtype}, {full_token_ids.dtype}")
         output = model(prev_token_ids)
-        hidden_states = output[0].squeeze(0)
+        hidden_states = output[0].squeeze(0).to(torch.bfloat16)
 
         hs = hidden_states[-1]  # use logits for next word prediction
-        target_id = full_token_ids[0][tgt_idx]
+        target_id = full_token_ids[0][tgt_idx].long()
         log_probs = log_softmax(hs)[target_id]
 
         return log_probs
@@ -86,8 +89,8 @@ def mask_unigram(data, lm, n=1):
     # pass to model one word at a time for autogressive models
     # start at 1 because BOS token is prepended
     for i in range(1, N):
-        sent1_masked_token_ids = sent1_token_ids.clone().detach()[:, :template1[i]]
-        sent2_masked_token_ids = sent2_token_ids.clone().detach()[:, :template1[i]]
+        sent1_masked_token_ids = sent1_token_ids.clone().detach()[:, :template1[i]].to(torch.long).to(args.device)
+        sent2_masked_token_ids = sent2_token_ids.clone().detach()[:, :template1[i]].to(torch.long).to(args.device)
         total_masked_tokens += 1
 
         score1 = get_log_prob_unigram_autoregressive(sent1_masked_token_ids, sent1_token_ids,
@@ -111,7 +114,7 @@ def evaluate(args):
         model = PromptTuningModelDDP.load_model(args.model_path, model_name=args.model_name, token=args.token,
                                     num_soft_prompts=args.prompt_length, device=args.device)
 
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        tokenizer = model.tokenizer
     else:
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
                                                     torch_dtype=torch.bfloat16,
