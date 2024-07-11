@@ -1,0 +1,66 @@
+\chapter{Implementation}
+In this chapter the implementation of the methodology is described in detail. Not only how the dataset is modified for an analysis with more target groups and terms, but also how the fine-tuning and the alternative of soft-prompt tuning is implemented in Python.
+
+\section{Datasets Extension}
+To enable the evaluation of more terms in relation to Gender and Sexual Identity, the WinoQueer dataset is extended. The sentences will be extracted and the target terms in there will be replaced by a placeholder. In the next step, we replace the placeholder with our new target terms, resulting in more counterfactual sentences to evaluate on. As described in the paper from \citet{winoqueer}, we keep the logic of the combination of first-names and gender or sexual identity terms. Therefor \enquote{male} names will not be combined with the term \enquote{lesbian} and \enquote{female} names will not be combined with \enquote{gay}. The already existent logic and combination will be extracted (combination of names and terms will be extracted). If the name is not associated f. i. with \enquote{gay} in the original dataset, it won't be associated with gay in the resulting extended dataset. 
+
+\section{Evaluating model for bias}
+To evaluate the bias present in the models, the code from \citet{winoqueer}\footnote{\url{https://github.com/katyfelkner/winoqueer}} is used. Some modification have to be done in order to enable the usage of news models, mostly in relation to the type of transformer models. In the presented code counterfactual sentences are inputted where the probability of outputting the target group in the sentece in calculated and compared for the two sentences. Comparing the two probabilities we can measure the bias. If the probabilities are nearly the same, it will be counted as neutral whereas if they differ, we count inequality for the target group. At the end, scores are retrieved from [0, 100] where 50 would be perfectly neutral. These result will be outputted in two different files. One containing all the sentences and the output probability for the presented target group and one summarising the bias for each group compared to the, in this case, heteronormative/binary gender group. 
+
+\section{Fine-tuning of models}
+
+\section{Soft-prompt tuning}
+
+\section{Using Kubernetes Cluster}
+
+
+% \chapter{Experimentation}
+
+% This chapter details the experimental setup and execution designed to assess the impact of soft-prompt tuning on mitigating biases related to sexual identity and orientation in large language models (LLMs). It includes a comprehensive description of the configuration of the LLMs, the implementation of soft-prompt tuning techniques, and the criteria established for evaluating bias within these models. The experimentation aims to provide empirical evidence regarding the effectiveness of soft-prompt tuning as a method for reducing biases in AI.
+
+% \section{Bias Detection Methods}
+
+% \subsection{Quantitative Measures}
+
+% This subsection outlines the quantitative measures used to detect biases in the model’s output, both before and after the application of soft-prompt tuning. It describes the statistical methods and metrics employed to quantify biases, providing a basis for comparison to evaluate the effectiveness of the tuning.
+
+% \subsection{Qualitative Assessment}
+
+% Complementing the quantitative measures, this subsection details the qualitative assessment methods used to evaluate changes in the representation of sexual identity in the model's output. It includes content analysis techniques and criteria for assessing the subtleties of bias that may not be captured through quantitative measures alone.
+
+% \section{Experimental Design}
+
+% The experimental design is structured to facilitate a systematic investigation into the biases present in LLM outputs and to assess the efficacy of soft-prompt tuning in mitigating these biases. This section elaborates on the selection of the LLM (e.g., Mistral), detailing the reasons for its choice and its relevance to the study’s objectives. It also describes the specific configurations of the model used during the experimentation, including any modifications or settings applied to enable soft-prompt tuning.
+
+% \subsection{Implementation of Soft-Prompt Tuning}
+
+% This subsection details the process of implementing soft-prompt tuning within the selected LLM, including the development and selection of prompts designed to mitigate biases related to sexual identity. It describes the technical steps taken to integrate these prompts into the model's operation, the rationale behind the choice of prompts, and the expected impact on the model's output.
+
+
+% \section{Dataset Utilization}
+
+% This section explains how the datasets, including holistic bias and winoqueer datasets, were utilized in the experimentation. It covers the specific aspects of these datasets that were leveraged to test the model's outputs for biases, as well as any preprocessing or modifications made to adapt the datasets for this purpose.
+
+% \section{Evaluation Criteria}
+
+% The criteria for evaluating the success of soft-prompt tuning in reducing biases are defined in this section. It includes the benchmarks and thresholds established to determine whether the adjustments made through soft-prompt tuning have effectively mitigated biases related to sexual identity.
+
+% \section{Results Presentation}
+
+% \subsection{Statistical Analysis}
+
+% This subsection presents the results of the statistical analysis conducted to compare the model's performance before and after soft-prompt tuning, highlighting any significant changes observed.
+
+% \subsection{Qualitative Findings}
+
+% The qualitative findings from the content analysis are detailed here, providing insights into how the representation of sexual identity in the model's outputs has been influenced by soft-prompt tuning.
+
+% \section{Discussion of Experimental Findings}
+
+% This section interprets the experimental findings, discussing the implications of the results for the effectiveness of soft-prompt tuning as a bias mitigation strategy. It evaluates the impact of the tuning on the model's ability to generate content free from biases related to sexual identity and considers the broader implications for the use of LLMs in various applications.
+
+% \section{Challenges and Limitations}
+
+% The challenges and limitations encountered during the experimentation are discussed, including any constraints related to the model, datasets, or the soft-prompt tuning process itself. This section provides transparency about the experimental process and offers context for interpreting the results.
+
+% This chapter, through detailing the experimental design, execution, and analysis, provides a foundation for understanding the impact of soft-prompt tuning on biases in LLMs, contributing to the broader discussion on developing more equitable and inclusive AI technologies.
