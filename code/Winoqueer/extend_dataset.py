@@ -54,7 +54,6 @@ def create_new_dataset(sentences, original_comb, gender_x, gender_y):
 
 gender_x = ['cis', 'cisgender']
 gender_y = ['non-binary', 'enby', 'trans*', 'transgender',
-            # 'transman', 'transwoman',
             'inter*', 'intersex', 'gender-fluid' ]
 
 
