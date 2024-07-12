@@ -60,6 +60,7 @@ class PromptTuningModel(nn.Module):
     def initialize_embedding(self, wte: nn.Embedding, n_tokens: int = 10, random_range: float = 0.5, initialize_from_vocab: bool = True):
         """Initializes learned embedding"""
         if initialize_from_vocab:
+            logger.info(f"Initializing learned embedding from vocab")
             return wte.weight[:n_tokens].clone().detach()
         return torch.FloatTensor(n_tokens, wte.weight.size(1)).uniform_(-random_range, random_range)
 

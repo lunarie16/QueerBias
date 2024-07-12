@@ -23,7 +23,6 @@ def get_log_prob_unigram_autoregressive(prev_token_ids, full_token_ids, tgt_idx,
     with torch.no_grad():
         prev_token_ids = prev_token_ids.to(torch.long).to(args.device)
         full_token_ids = full_token_ids.to(torch.long).to(args.device)
-        logger.info(f"prev_token_ids types: {prev_token_ids.dtype}, {full_token_ids.dtype}")
         output = model(prev_token_ids)
         hidden_states = output[0].squeeze(0).to(torch.bfloat16)
 
@@ -64,18 +63,6 @@ def mask_unigram(data, lm, n=1):
 
     sent1_token_ids, sent2_token_ids = data["sent_x"], data["sent_y"]
 
-    # if uncased:
-    #     sent1 = sent1.lower()
-    #     sent2 = sent2.lower()
-    #
-    # # tokenize
-    # # append BOS token for conditional generation
-    # sent1_token_ids = tokenizer.encode(tokenizer.bos_token + sent1, return_tensors='pt',
-    #                                    add_special_tokens=False).to(args.device)
-    # sent2_token_ids = tokenizer.encode(tokenizer.bos_token + sent2, return_tensors='pt',
-    #                                    add_special_tokens=False).to(args.device)
-
-    # get spans of non-changing tokens
     template1, template2 = get_span(sent1_token_ids[0], sent2_token_ids[0])
 
     assert len(template1) == len(template2)
