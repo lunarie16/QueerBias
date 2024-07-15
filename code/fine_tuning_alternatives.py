@@ -5,7 +5,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch
 from torch.utils.data import DataLoader
 from transformers import Trainer, TrainingArguments, DataCollatorForLanguageModeling, AutoTokenizer, \
-    AutoModelForCausalLM, logging, GenerationConfig,  default_data_collator, get_linear_schedule_with_warmup
+    AutoModelForCausalLM, logging, GenerationConfig,  default_data_collator, get_linear_schedule_with_warmup, \
+    BitsAndBytesConfig
 from transformers.optimization import Adafactor, AdafactorSchedule
 from peft import get_peft_config, get_peft_model, PromptTuningInit, PromptTuningConfig, TaskType, PeftType, LoraConfig, PrefixTuningConfig
 from datasets import load_dataset, Dataset, DatasetDict, enable_caching
@@ -27,12 +28,13 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 enable_caching()
 
-dist.init_process_group(backend='nccl')
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+# os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# dist.init_process_group(backend='nccl')
 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
-# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1']
+
 
 @staticmethod
 def get_device() -> torch.device:
@@ -62,12 +64,16 @@ num_gpu = int(os.getenv("NUM_GPU", 1))
 gradient_accum_steps = int(os.getenv("GRADIENT_ACCUMULATION_STEPS", 8))
 
 local_rank = int(os.environ['LOCAL_RANK'])
-torch.cuda.set_device(local_rank)
+# torch.cuda.set_device(local_rank)
+device = torch.device('cuda', local_rank)
+logger.info(f"Local rank: {local_rank}")
 
-device = torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
+# device = torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
 
+dist.init_process_group(backend='nccl', rank=local_rank, world_size=num_gpu)
+# os.environ["CUDA_VISIBLE_DEVICES"] = f"{num_gpu}"
+# os.environ["OMP_NUM_THREADS"] = "1"
 
-os.environ["CUDA_VISIBLE_DEVICES"] = f"{num_gpu}"
 
 gc.collect()
 
@@ -109,17 +115,36 @@ def define_peft_config(mode, model_name):
         settings from: https://huggingface.co/docs/peft/quicktour
         """
         peft_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32,
-            lora_dropout=0.1
+            task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8,
+            target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
+            lora_alpha=16, lora_dropout=0.1
         )
 
     return peft_config
-model = AutoModelForCausalLM.from_pretrained(model_name)
+
+# if mode == 'lora':
+#     bnb_config = BitsAndBytesConfig(
+#         load_in_4bit=True,
+#         bnb_4bit_quant_type="nf4",
+#         bnb_4bit_compute_dtype=torch.bfloat16
+#     )
+#     model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config, torch_dtype=torch.bfloat16)
+# else:
+model = AutoModelForCausalLM.from_pretrained(model_name,
+                                             # attn_implementation="flash_attention_2",
+                                             torch_dtype=torch.bfloat16)
+#     .to(device)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
+if tokenizer.pad_token is None:
+    logger.info("Setting pad token to eos token")
+    tokenizer.pad_token = tokenizer.eos_token
+    logger.info(f"Resizing token embeddings to {len(tokenizer)}")
+    model.resize_token_embeddings(len(tokenizer))
+
 peft_config = define_peft_config(mode, model_name)
 model = get_peft_model(model, peft_config)
 model.config.gradient_checkpointing = True
-print(model.print_trainable_parameters())
+logger.info(model.print_trainable_parameters())
 model.to(device)
 model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
@@ -153,7 +178,7 @@ elif dataset_path.endswith(".csv"):
 else:
     dataset = load_dataset(dataset_path)
 
-output_dir = f"data/results/{mode}/models"
+output_dir = f"data/results/{mode}/peft/models"
 
 reduce_dataset = bool(int(os.getenv("REDUCE_DATASET", 1)))
 reduced_size = int(os.getenv("REDUCE_DATASET_SIZE", 10000))
@@ -168,7 +193,7 @@ if reduce_dataset:
 
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 #
-logger.info("Dataset loaded. Now tokenizing...")
+# logger.info("Dataset loaded. Now tokenizing...")
 #take small subset
 # if 'tokenized' not in dataset_path:
 #     dataset = dataset.map(tokenize_function, batched=True)
@@ -183,11 +208,18 @@ eval_dataset = dataset['validation'].remove_columns(['title', 'url', 'media_name
 
 logger.info(f"Column names {train_dataset.column_names}")
 
-train_dataloader = DataLoader(
-    train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True
-)
-eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True)
-
+# train_dataloader = DataLoader(
+#     train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True
+# )
+# eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True)
+#
+# torch.utils.data.DataLoader(
+#     dataset=train_dataset,
+#     batch_size=32,
+# -   shuffle=True,
+# +   shuffle=False,
+# +   sampler=DistributedSampler(train_dataset),
+# )
 
 
 training_args = TrainingArguments(
@@ -198,7 +230,8 @@ training_args = TrainingArguments(
     per_device_train_batch_size=batch_size,
     per_device_eval_batch_size=batch_size,
     gradient_accumulation_steps=gradient_accum_steps,
-    learning_rate=learning_rate,
+    # gradient_checkpointing=True, # not available with ddp
+    # learning_rate=learning_rate,
     # prediction_loss_only=True,
     report_to=["tensorboard"],
     weight_decay=0.01,
@@ -208,20 +241,22 @@ training_args = TrainingArguments(
     ddp_find_unused_parameters=False,
     local_rank=local_rank,
     remove_unused_columns=False,
-    # fp16=True,
+    bf16=True,
     # optim="adafactor"
 )
+if deepspeed_path:
+    training_args.deepspeed = deepspeed_path
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-lr_scheduler = get_linear_schedule_with_warmup(
-    optimizer=optimizer,
-    num_warmup_steps=0,
-    num_training_steps=(len(train_dataloader) * epochs),
-)
-# optimizer = Adafactor(model.parameters(), scale_parameter=True,
-#                       warmup_init=True, lr=None, relative_step=True)
-# lr_scheduler = AdafactorSchedule(optimizer)
+# optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+# lr_scheduler = get_linear_schedule_with_warmup(
+#     optimizer=optimizer,
+#     num_warmup_steps=0,
+#     num_training_steps=(len(train_dataloader) * epochs),
+# )
+optimizer = Adafactor(model.parameters(), scale_parameter=True,
+                      warmup_init=True, lr=None, relative_step=True)
+lr_scheduler = AdafactorSchedule(optimizer)
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -254,4 +289,4 @@ with open(f"data/results/{mode}/summary-{model_name}-{end}.txt", 'w') as f:
     f.write(f"Prompt length: {prompt_length}")
     f.write(f"Batch size: {batch_size}")
     f.write(f"Learning rate: {learning_rate}")
-    f
+    f.write(f"Epochs: {epochs}")

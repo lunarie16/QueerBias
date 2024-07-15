@@ -13,7 +13,7 @@ options = {'lgbtq': ['queer'],
            'lesbian': ['lesbian', 'homo', 'homosexual'],
            'pansexual': ['pan', 'pansexual'],
            'nb': ['enby', 'non-binary', 'gender-fluid'],
-           'transgender': ['trans*', 'transgender'],
+           'transgender': ['trans*', 'transgender', 'inter*', 'intersexual'],
            'asexual': ['asexual', 'ace', 'demisexual', 'demi'],
            'bisexual': ['bi', 'bisexual'],
            'queer': ['queer']

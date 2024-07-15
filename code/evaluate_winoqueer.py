@@ -287,8 +287,11 @@ if __name__ == "__main__":
         files = os.listdir(args.dataset_path)
         file_path = args.dataset_path
         for f in tqdm(files):
-            logger.info(f"Evaluating {f}")
-            args.dataset_path = f'{file_path}{f}'
-            evaluate(args)
+            if f.startswith('winoqueer'):
+                logger.info(f"Evaluating {f}")
+                args.dataset_path = f'{file_path}{f}'
+                evaluate(args)
+            else:
+                continue
     else:
         evaluate(args)
