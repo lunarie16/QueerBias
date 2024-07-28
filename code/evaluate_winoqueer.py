@@ -6,6 +6,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm import tqdm
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModelDDP
+from peft import PeftModel
 import difflib
 import time
 import csv
@@ -97,16 +98,28 @@ def mask_unigram(data, lm, n=1):
 
 def evaluate(args):
     # Load model and tokenizer based on mode
-    if args.mode == "soft-prompt":
-        model = PromptTuningModelDDP.load_model(args.model_path, model_name=args.model_name, token=args.token,
-                                    num_soft_prompts=args.prompt_length, device=args.device)
+    # if args.mode == "soft-prompt":
+    #     model = PromptTuningModelDDP.load_model(args.model_path, model_name=args.model_name, token=args.token,
+    #                                 num_soft_prompts=args.prompt_length, device=args.device)
+    #
+    #     tokenizer = model.tokenizer
+    # else:
 
-        tokenizer = model.tokenizer
+    if args.mode != 'pretrained':
+        model_path = f"data/results/{args.mode}/peft/models/"
+        logger.info(f"Loading model from {model_path}")
+        model = AutoModelForCausalLM.from_pretrained(model_path,
+                                                    torch_dtype=torch.bfloat16).to(args.device)
+        short_model_name = model_path.split("/")[-1]
+        adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
+        logger.info(f"Loading adapter model from {adapter_model_name}")
+        model = PeftModel.from_pretrained(model, adapter_model_name)
     else:
+        logger.info(f"Loading model from {args.model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
-                                                    torch_dtype=torch.bfloat16,
-                                                    token=args.token).to(args.device)
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+                                                     torch_dtype=torch.bfloat16,
+                                                     token=args.token).to(args.device)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
     if hasattr(tokenizer, 'do_lower_case'):
         uncased = tokenizer.do_lower_case
@@ -184,7 +197,7 @@ def evaluate(args):
             # Convert the new row to a DataFrame and use pd.concat to append it
             df_score = pd.concat([df_score, pd.DataFrame([new_row])], ignore_index=True)
     end = time.time()
-    elapsed_time = start - end
+    elapsed_time = end - start
     # add model name without company
     file_extension = args.model_name.split("/")[-1]
     # add information if gender or sexual identity

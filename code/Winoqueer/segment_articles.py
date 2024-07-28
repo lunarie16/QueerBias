@@ -47,12 +47,12 @@ df.to_csv('data/datasets/queer_news.csv', index=False)
 print("done!")
 
 
-dataset_pd = Dataset.from_pandas(df)
-train_test = dataset_pd.train_test_split(test_size=.1)
-test_eval = train_test['test'].train_test_split(test_size=.5)
-dataset =  DatasetDict({
-                        "train": train_test["train"],
-                        "test": test_eval["test"],
-                        "validation": test_eval["train"]})
-for split, split_dataset in dataset.items():
-    split_dataset.to_json(f"queer_news-{split}.jsonl")
+# dataset_pd = Dataset.from_pandas(df)
+# train_test = dataset_pd.train_test_split(test_size=.1)
+# test_eval = train_test['test'].train_test_split(test_size=.5)
+# dataset =  DatasetDict({
+#                         "train": train_test["train"],
+#                         "test": test_eval["test"],
+#                         "validation": test_eval["train"]})
+# for split, split_dataset in dataset.items():
+#     split_dataset.to_json(f"queer_news-{split}.jsonl")

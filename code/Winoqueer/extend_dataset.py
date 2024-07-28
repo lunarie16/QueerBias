@@ -25,25 +25,26 @@ def create_new_dataset(sentences, original_comb, gender_x, gender_y):
     df_content = []
     for i, sent in enumerate(sentences):
         original_combination = original_comb[i].lower().split(', ')
-        original_combination = [options[x] for x in original_combination]
+        mapped_options = [options[x] for x in original_combination]
         # flatten list of original_combination
-        original_combination = [x for xs in original_combination for x in xs]
+        options_left = set([x for xs in mapped_options for x in xs])
+        gender_left = list(options_left.intersection(set(gender_y)))
         for g_x in gender_x:
             for g_y in original_combination:
-                name = re.match(r'\b([A-Z][a-z]*)\b', sent)
-                if name is not None:
-                    name = name.group(0)
-                    if name in df_names.index:
-                        gender_options = df_names.loc[name]['Gender_ID_combinations'].split(', ')
-                        if 'NB' not in gender_options and g_y in ['non-binary', 'enby']:
-                            skipped.add((name, g_y))
-                            continue
-                        if 'Lesbian' not in gender_options and g_y == 'lesbian':
-                            skipped.add((name, g_y))
-                            continue
-                        if 'Gay' not in gender_options and g_y == 'gay':
-                            skipped.add((name, g_y))
-                            continue
+                # name = re.match(r'\b([A-Z][a-z]*)\b', sent)
+                # if name is not None:
+                #     name = name.group(0)
+                #     if name in df_names.index:
+                #         gender_options = df_names.loc[name]['Gender_ID_combinations'].split(', ')
+                #         if 'NB' not in gender_options and g_y in ['non-binary', 'enby']:
+                #             skipped.add((name, g_y))
+                #             continue
+                #         if 'Lesbian' not in gender_options and g_y == 'lesbian':
+                #             skipped.add((name, g_y))
+                #             continue
+                #         if 'Gay' not in gender_options and g_y == 'gay':
+                #             skipped.add((name, g_y))
+                #             continue
 
                 df_content.append({'Gender_ID_y': g_x,
                                         'Gender_ID_x': g_y,

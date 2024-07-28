@@ -47,8 +47,26 @@ def get_device() -> torch.device:
         return torch.device("cpu")
 
 
+def remove_columns_from_dataset(dataset):
+    columns_to_remove = [x for x in dataset['train'].column_names if x not in ['input_ids', 'attention_mask', 'sentence']]
+    logger.info("columns that could possibly be removed: " + str(columns_to_remove))
+    if columns_to_remove:
+        try:
+            logger.info("Removing columns: " + str(columns_to_remove))
+            if columns_to_remove in dataset['train'].column_names:
+                dataset['train'] = dataset['train'].remove_columns(columns_to_remove)
+            if columns_to_remove in dataset['validation'].column_names:
+                dataset['validation'] = dataset['validation'].remove_columns(columns_to_remove)
+            if columns_to_remove in dataset['test'].column_names:
+                dataset['test'] = dataset['test'].remove_columns(columns_to_remove)
+            dataset.save_to_disk(f"data/datasets/tokenized_{short_model_name}_queer_news.hf")
+        except Exception as e:
+            logger.error(f"Error removing columns: {e}")
+    return dataset
 
-modes = ['soft-prompt', 'prefix-tuning', 'lora', 'all']
+
+
+modes = ['soft-prompt',  'lora', 'prefix-tuning',]
 
 
 model_name = os.getenv("MODEL_NAME", 'google/gemma-7b')
@@ -75,16 +93,26 @@ dist.init_process_group(backend='nccl', rank=local_rank, world_size=num_gpu)
 # os.environ["OMP_NUM_THREADS"] = "1"
 
 
-gc.collect()
+# log all environment variables
+for k, v in os.environ.items():
+    logger.info(f"{k}: {v}")
 
-if mode not in modes:
-    raise ValueError(f"Mode {mode} not supported. Supported modes are {modes}")
+
+gc.collect()
 
 if mode == 'all':
     for m in modes:
         os.environ["MODE"] = m
         os.system("python code/main_dp.py")
 
+
+def tokenize_function(example):
+    if 'sentence' in example:
+        return tokenizer(example['sentence'], max_length=512, truncation=True,
+                         padding='max_length')
+    elif 'original' in example:
+        return tokenizer(example['original'], max_length=512, truncation=True,
+                         padding='max_length')
 
 
 """Loads the model and tokenizer based on the provided mode."""
@@ -122,14 +150,6 @@ def define_peft_config(mode, model_name):
 
     return peft_config
 
-# if mode == 'lora':
-#     bnb_config = BitsAndBytesConfig(
-#         load_in_4bit=True,
-#         bnb_4bit_quant_type="nf4",
-#         bnb_4bit_compute_dtype=torch.bfloat16
-#     )
-#     model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config, torch_dtype=torch.bfloat16)
-# else:
 model = AutoModelForCausalLM.from_pretrained(model_name,
                                              # attn_implementation="flash_attention_2",
                                              torch_dtype=torch.bfloat16)
@@ -166,19 +186,34 @@ if dataset_path.endswith(".pkl"):
 elif dataset_path.endswith(".csv"):
     dataset = load_dataset("csv", data_files=dataset_path)
     # drop all sentences that are none
+    logger.info(f"Dataset length: {len(dataset)}")
+    columns_to_remove =[x for x in dataset['train'].column_names if x != 'sentence']
+    if [x for x in columns_to_remove if x in dataset.column_names]:
+        logger.info("Removing columns: " + str(columns_to_remove))
+        dataset = dataset.remove_columns(columns_to_remove)
     dataset = dataset.filter(lambda x: x['sentence'] is not None)
+    logger.info(f"Dataset length: {len(dataset)} after removing Nones")
+    dataset = dataset.filter(lambda x: len(x['sentence'].split(' ')) > 1)
+    # give length of dataset
+    logger.info(f"Dataset length: {len(dataset)} after filtering for len > 1 sentences")
     if not 'validation' in dataset.data:
         train_test = dataset['train'].train_test_split(test_size=.1)
-        test_eval = train_test['test'].train_test_split(test_size=.9)
+        test_eval = train_test['test'].train_test_split(test_size=.5)
         dataset = DatasetDict({
             "train": train_test["train"],
             "test": test_eval["test"],
             "validation": test_eval["train"]})
         dataset.save_to_disk("data/datasets/queer_news.hf")
+        logger.info(f"Dataset saved to data/datasets/queer_news.hf")
 else:
     dataset = load_dataset(dataset_path)
+    logger.info(f"Column names: {dataset.column_names}")
 
-output_dir = f"data/results/{mode}/peft/models"
+
+
+short_model_name = model_name.split("/")[-1]
+output_dir = f"data/results/{mode}/peft/{short_model_name}"
+logger.info(f"Output directory: {output_dir}")
 
 reduce_dataset = bool(int(os.getenv("REDUCE_DATASET", 1)))
 reduced_size = int(os.getenv("REDUCE_DATASET_SIZE", 10000))
@@ -193,33 +228,26 @@ if reduce_dataset:
 
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 #
-# logger.info("Dataset loaded. Now tokenizing...")
-#take small subset
-# if 'tokenized' not in dataset_path:
-#     dataset = dataset.map(tokenize_function, batched=True)
-#     short_model_name = model_name.split("/")[-1]
-#     dataset.save_to_disk(f"data/datasets/tokenized_{short_model_name}_queer_news.hf")
-# dataset = dataset.remove_columns_(dataset["train"].column_names)
+if 'tokenized' not in dataset_path:
+
+    logger.info("Dataset loaded. Now tokenizing...")
+    dataset = dataset.map(tokenize_function, batched=True)
+    short_model_name = model_name.split("/")[-1]
+    dataset = remove_columns_from_dataset(dataset)
+    dataset.save_to_disk(f"data/datasets/tokenized_{short_model_name}_queer_news.hf")
+    logger.info(f"Tokenization complete. Saved to {f'data/datasets/tokenized_{short_model_name}_queer_news.hf'}")
+
 
 logger.info(
     f"Dataset loading complete. Train size: {len(dataset['train'])}, Validation size: {len(dataset['validation'])}")
-train_dataset = dataset['train'].remove_columns(['title', 'url', 'media_name', 'text', 'error', 'sentence'])
-eval_dataset = dataset['validation'].remove_columns(['title', 'url', 'media_name', 'text', 'error', 'sentence'])
 
-logger.info(f"Column names {train_dataset.column_names}")
 
-# train_dataloader = DataLoader(
-#     train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True
-# )
-# eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=batch_size, pin_memory=True)
-#
-# torch.utils.data.DataLoader(
-#     dataset=train_dataset,
-#     batch_size=32,
-# -   shuffle=True,
-# +   shuffle=False,
-# +   sampler=DistributedSampler(train_dataset),
-# )
+train_dataset = dataset['train'].remove_columns([x for x in dataset['train'].column_names if x not in ['input_ids', 'attention_mask']])
+eval_dataset = dataset['validation'].remove_columns([x for x in dataset['validation'].column_names if x not in ['input_ids', 'attention_mask']])
+
+logger.info(f"Final column names {train_dataset.column_names}")
+
+
 
 
 training_args = TrainingArguments(
@@ -279,14 +307,14 @@ trainer.save_model(output_dir)
 logger.info("Evaluation started...")
 trainer.evaluate()
 end = time.time()
-elapsed_time = start - end
+elapsed_time = end - start
 end = time.strftime("%Y%m%d-%H%M%S")
 model_name = model_name.replace("/", "-")[-1]
 with open(f"data/results/{mode}/summary-{model_name}-{end}.txt", 'w') as f:
-    f.write(f"Time elapsed for training: {elapsed_time}")
-    f.write(f"Model: {model_name}")
-    f.write(f"Dataset: {dataset_path}")
-    f.write(f"Prompt length: {prompt_length}")
-    f.write(f"Batch size: {batch_size}")
-    f.write(f"Learning rate: {learning_rate}")
-    f.write(f"Epochs: {epochs}")
+    f.write(f"Time elapsed for training: {elapsed_time}\n")
+    f.write(f"Model: {model_name}\n")
+    f.write(f"Dataset: {dataset_path}\n")
+    f.write(f"Prompt length: {prompt_length}\n")
+    f.write(f"Batch size: {batch_size}\n")
+    f.write(f"Learning rate: {learning_rate}\n")
+    f.write(f"Epochs: {epochs}\n")
