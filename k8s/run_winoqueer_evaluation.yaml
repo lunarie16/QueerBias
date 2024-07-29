@@ -1,17 +1,16 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: winoqueer-eval-gemma-soft-prompt-fast
+  name: winoqueer-eval-gemma-sp
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: winoqueer-eval-gemma-soft-prompt-fast
-          image: registry.datexis.com/s91000/thesis-tuning:0.0.9
+        - name: winoqueer-eval-gemma-sp
+          image: registry.datexis.com/s91000/thesis-tuning:0.0.14
           command: ["/bin/sh", "-c"]
-          args: ["cd data && pip install accelerate tensorboardX sentencepiece protobuf &&  python code/evaluate_winoqueer.py" ]
-#          args: ["pip install ray[default] && nvidia-smi &&  ray start --node-ip-address=$MY_POD_IP --num-cpus=$MY_CPU_REQUEST --address=$RAY_HEAD_SERVICE_HOST:$RAY_HEAD_SERVICE_PORT_REDIS_PRIMARY --object-manager-port=12345 --node-manager-port=12346 && python train_default.py"]
+          args: ["cd data && python code/evaluate_winoqueer.py" ]
           volumeMounts:
             - name: general-data
               mountPath: /tuning/data
@@ -42,11 +41,11 @@ spec:
 #                'mistralai/Mistral-7B-v0.3'
 #            "openlm-research/open_llama_13b"
             - name: MODEL_PATH
-              value: "data/results/soft-prompt/models/gemma-7b.pt"
+              value: google/gemma-7b"
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'data/datasets/winoqueer_gender_identity.csv'
+              value: 'data/datasets/'
             - name: MODE
               value: "soft-prompt"
             - name: PROMPT_LENGTH
@@ -69,18 +68,17 @@ spec:
               value: 'data/results/soft-prompt/queer_news_trained_prompt_embeddings.pt'
           resources:
             requests:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 2
               cpu: 1
-              memory: 30Gi
+              memory: 10Gi
             limits:
-              nvidia.com/gpu: 1
+              nvidia.com/gpu: 2
               memory: 60Gi
-              cpu: 2
       imagePullSecrets:
         - name: private-registry-auth
       restartPolicy: Never
       nodeSelector:
-        gpu: v100
+        gpu: a100
       volumes:
         - name: general-data
           persistentVolumeClaim:

@@ -106,11 +106,9 @@ def evaluate(args):
     # else:
 
     if args.mode != 'pretrained':
-        model_path = f"data/results/{args.mode}/peft/models/"
-        logger.info(f"Loading model from {model_path}")
-        model = AutoModelForCausalLM.from_pretrained(model_path,
+        model = AutoModelForCausalLM.from_pretrained(args.model_name,
                                                     torch_dtype=torch.bfloat16).to(args.device)
-        short_model_name = model_path.split("/")[-1]
+        short_model_name = args.model_name.split("/")[-1]
         adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
         logger.info(f"Loading adapter model from {adapter_model_name}")
         model = PeftModel.from_pretrained(model, adapter_model_name)

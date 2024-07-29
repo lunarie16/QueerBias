@@ -1,17 +1,17 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: lora-llama3-queer-news
+  name: lora-gemma-queer-news
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: lora-llama3-queer-news
+        - name: lora-gemma-queer-news
           image: registry.datexis.com/s91000/thesis-tuning:0.0.14
           command: ["/bin/sh", "-c"]
 #          command: ["python -m torch.distributed.launch --nproc_per_node=4  CUDA_LAUNCH_BLOCKING=1 code/main_no_class.py"]
-          args: ["cd data && pip install --upgrade transformers trl && torchrun --nproc_per_node=4 --master_addr=$(MY_POD_IP) --master_port=29500 code/fine_tuning_alternatives.py" ]
+          args: ["cd data && pip install --upgrade transformers trl bitsandbytes && torchrun --nproc_per_node=4 --master_addr=$(MY_POD_IP) --master_port=29500 code/fine_tuning_alternatives.py" ]
           volumeMounts:
             - name: general-data
               mountPath: /tuning/data
@@ -35,7 +35,7 @@ spec:
                 resourceFieldRef:
                   resource: requests.cpu
             - name: MODEL_NAME
-              value: 'meta-llama/Meta-Llama-3-8B'
+              value: 'google/gemma-7b'
               #              'google/gemma-7b'
               #              'meta-llama/Meta-Llama-3-8B'
               #                'mistralai/Mistral-7B-v0.3'
@@ -43,7 +43,7 @@ spec:
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'data/datasets/tokenized_Meta-Llama-3-8B_queer_news.hf'
+              value: 'data/datasets/tokenized_gemma-7b_queer_news.hf'
             - name: MODE
               value: "lora"
             - name: PROMPT_LENGTH
@@ -53,13 +53,13 @@ spec:
             - name: CHUNK_SIZE
               value: "10000"
             - name: LM_MODEL_PATH
-              value: "meta-llama/Meta-Llama-3-8B"
+              value: "google/gemma-7b"
             - name: REDUCE_DATASET
               value: "0"
             - name: REDUCE_DATASET_SIZE
               value: "100000"
             - name: BATCH_SIZE
-              value: "4"
+              value: "2"
             - name: EPOCHS
               value: "1"
             - name: LEARNING_RATE
@@ -69,9 +69,7 @@ spec:
             - name: NUM_GPU
               value: "4"
             - name: GRADIENT_ACCUMULATION_STEPS
-              value: "16"
-#            - name: DEEPSPEED_PATH
-#              value: "code/deepspeed_config.json"
+              value: "32"
           resources:
             requests:
               nvidia.com/gpu: 4

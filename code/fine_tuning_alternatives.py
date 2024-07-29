@@ -9,7 +9,7 @@ from transformers import Trainer, TrainingArguments, DataCollatorForLanguageMode
     BitsAndBytesConfig
 from transformers.optimization import Adafactor, AdafactorSchedule
 from peft import get_peft_config, get_peft_model, PromptTuningInit, PromptTuningConfig, TaskType, PeftType, LoraConfig, PrefixTuningConfig
-from datasets import load_dataset, Dataset, DatasetDict, enable_caching
+from datasets import load_dataset, Dataset, DatasetDict, enable_caching, load_from_disk
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModelDDP, SoftPromptTrainerDDP
 from logging import getLogger
@@ -206,7 +206,7 @@ elif dataset_path.endswith(".csv"):
         dataset.save_to_disk("data/datasets/queer_news.hf")
         logger.info(f"Dataset saved to data/datasets/queer_news.hf")
 else:
-    dataset = load_dataset(dataset_path)
+    dataset = load_from_disk(dataset_path)
     logger.info(f"Column names: {dataset.column_names}")
 
 
@@ -229,7 +229,6 @@ if reduce_dataset:
 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 #
 if 'tokenized' not in dataset_path:
-
     logger.info("Dataset loaded. Now tokenizing...")
     dataset = dataset.map(tokenize_function, batched=True)
     short_model_name = model_name.split("/")[-1]
