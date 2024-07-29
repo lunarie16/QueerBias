@@ -8,15 +8,15 @@ df = pd.read_csv('./data/winoqueer_sentence_only.csv').set_index('Unnamed: 0')
 df_names = pd.read_csv('./data/winoqueer_names.csv').set_index('name').drop(columns='Unnamed: 0')
 df_grouped = pd.read_csv('./data/winoqueer_final_grouped.csv').set_index('Unnamed: 0')
 
-options = {'lgbtq': ['queer'],
+options = {'lgbtq': ['lgbtq, queer'],
            'gay': ['gay', 'homo', 'homosexual'],
-           'lesbian': ['lesbian', 'homo', 'homosexual'],
+           'lesbian': ['lesbian', 'homo', 'homosexual', 'sapphic'],
            'pansexual': ['pan', 'pansexual'],
            'nb': ['enby', 'non-binary', 'gender-fluid'],
            'transgender': ['trans*', 'transgender', 'inter*', 'intersexual'],
            'asexual': ['asexual', 'ace', 'demisexual', 'demi'],
            'bisexual': ['bi', 'bisexual'],
-           'queer': ['queer']
+           'queer': ['queer', 'lgbtq']
            }
 
 
@@ -30,7 +30,7 @@ def create_new_dataset(sentences, original_comb, gender_x, gender_y):
         options_left = set([x for xs in mapped_options for x in xs])
         gender_left = list(options_left.intersection(set(gender_y)))
         for g_x in gender_x:
-            for g_y in original_combination:
+            for g_y in gender_left:
                 # name = re.match(r'\b([A-Z][a-z]*)\b', sent)
                 # if name is not None:
                 #     name = name.group(0)
@@ -58,18 +58,14 @@ gender_y = ['non-binary', 'enby', 'trans*', 'transgender',
             'inter*', 'intersex', 'gender-fluid' ]
 
 
-skipped = set()
 gender_df = create_new_dataset(df_grouped['sentence'],df_grouped['Gender_ID_combinations'], gender_x, gender_y)
-print(skipped)
 
 
 gender_df.to_csv('./data/winoqueer_gender_identity.csv')
 
 gender_x1 = ['heterosexual', 'hetero', 'straight']
 gender_y1 = ['bisexual', 'bi', 'homosexual', 'homo', 'gay', 'lesbian', 'queer', 'pansexual', 'pan',
-             'asexual', 'ace', 'demisexual', 'demi']
+             'asexual', 'ace', 'demisexual', 'demi', 'sapphic']
 
-skipped = set()
 sexual_df = create_new_dataset(df_grouped['sentence'],df_grouped['Gender_ID_combinations'], gender_x1, gender_y1)
-print(skipped)
 sexual_df.to_csv('./data/winoqueer_sexual_identity.csv')

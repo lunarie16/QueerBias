@@ -6,14 +6,14 @@ pd.set_option('display.max_columns', None)
 df = pd.read_csv('data/winoqueer_final.csv').set_index('Unnamed: 0')
 print(df['Gender_ID_x'].unique())
 
-df['sent'] = df.apply(lambda row: row['sent_y'].replace(row['Gender_ID_y'], '[identification]'), axis=1)
+df['sent'] = df.apply(lambda row: row['sent_y'].lower().replace(row['Gender_ID_y'].lower(), '[identification]'), axis=1)
 
 # Create a new column with the sentence without Gender_ID_x
-df['cleaned_sent'] = df['sent_x']
-
+df['cleaned_sent'] = df['sent']
 # Remove all instances of Gender_ID_x values from the sentences
 for gid in df['Gender_ID_x'].unique():
-    df['cleaned_sent'] = df['cleaned_sent'].str.replace(gid, "[identification]", regex=False).str.strip()
+    df['cleaned_sent'] = df['cleaned_sent'].str.lower().replace(gid.lower(), "[identification]", regex=False).str.strip()
+    df['cleaned_sent'] = df['cleaned_sent'].str.replace(r'nonbinary', "[identification]", regex=True).str.strip()
 
 
 
