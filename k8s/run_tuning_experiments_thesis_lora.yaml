@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: lora-gemma-queer-news
+  name: lora-gemma-queer-news-no-eval
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: lora-gemma-queer-news
+        - name: lora-gemma-queer-news-no-eval
           image: registry.datexis.com/s91000/thesis-tuning:0.0.14
           command: ["/bin/sh", "-c"]
 #          command: ["python -m torch.distributed.launch --nproc_per_node=4  CUDA_LAUNCH_BLOCKING=1 code/main_no_class.py"]

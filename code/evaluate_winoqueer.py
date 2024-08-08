@@ -6,7 +6,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from tqdm import tqdm
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModelDDP
-from peft import PeftModel
+from peft import PeftModel, AutoPeftModelForCausalLM, PeftConfig
 import difflib
 import time
 import csv
@@ -97,21 +97,47 @@ def mask_unigram(data, lm, n=1):
     return score
 
 def evaluate(args):
-    # Load model and tokenizer based on mode
-    # if args.mode == "soft-prompt":
-    #     model = PromptTuningModelDDP.load_model(args.model_path, model_name=args.model_name, token=args.token,
-    #                                 num_soft_prompts=args.prompt_length, device=args.device)
-    #
-    #     tokenizer = model.tokenizer
-    # else:
+
 
     if args.mode != 'pretrained':
-        model = AutoModelForCausalLM.from_pretrained(args.model_name,
-                                                    torch_dtype=torch.bfloat16).to(args.device)
         short_model_name = args.model_name.split("/")[-1]
         adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
+        if os.getenv('CHECKPOINT'):
+            checkpoint = str(os.getenv('CHECKPOINT', '1000'))
+            adapter_model_name = f'data/results/{args.mode}/peft/{short_model_name}/checkpoint-{checkpoint}'
+        if args.adapter_path:
+            adapter_model_name = args.adapter_path
         logger.info(f"Loading adapter model from {adapter_model_name}")
-        model = PeftModel.from_pretrained(model, adapter_model_name)
+        # model = AutoModelForCausalLM.from_pretrained(adapter_model_name).to(args.device)
+        model = AutoModelForCausalLM.from_pretrained(args.model_name).to(args.device)
+        # model = PeftModel.from_pretrained(base_model, adapter_model_name + '/queernews', 'queernews',
+        #                                              torch_dtype=torch.bfloat16,
+        #                                              token=args.token).to(args.device)
+        peft_config = PeftConfig.from_pretrained(adapter_model_name + '/queernews')
+
+        # to initiate with random weights
+        peft_config.init_lora_weights = False
+        logger.info(f"Loading adapter model from config {peft_config}")
+        model.add_adapter(peft_config, 'queernews')
+        model.enable_adapters()
+        # model.load_adapter(adapter_model_name + '/queernews', adapter_name='queernews')
+        # logger.info(model.config.adapters)
+        # model.enable_adapters()
+        logger.info(model.active_adapters())
+
+        for name, param in model.named_parameters():
+            logger.info(f'name: {name}, param: {param.requires_grad}')
+        # model = PeftModel.from_pretrained(model, adapter_model_name, 'queernews',
+        #                                             torch_dtype=torch.bfloat16).to(args.device)
+        # short_model_name = args.model_name.split("/")[-1]
+        # adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
+        # if args.mode == 'lora':
+        #     logger.info(f"LORA - Loading adapter model from {adapter_model_name}")
+        #     model.add_adapter(adapter_model_name, 'queernews')
+        #     model.set_adapter('queernews')
+        # else:
+        #     logger.info(f"Loading adapter model from {adapter_model_name}")
+        #     model = PeftModel.from_pretrained(model, adapter_model_name)
     else:
         logger.info(f"Loading model from {args.model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
@@ -257,14 +283,12 @@ if __name__ == "__main__":
     class Args:
         dataset_path = os.getenv('DATASET_PATH')
         output_file = os.getenv('OUTPUT_FILE')
-        model_path = os.getenv('MODEL_PATH')
         model_name = os.getenv('MODEL_NAME', 'gpt2')
-        prompt_length = int(os.getenv('PROMPT_LENGTH', 10))
         mode = os.getenv('MODE')
         token = os.getenv('HF_TOKEN')
         dataset_size = int(os.getenv('DATASET_SIZE'))
         reduce_dataset = bool(int(os.getenv('REDUCE_DATASET', 0)))
-        soft_prompt_path = os.getenv('SOFT_PROMPT_PATH')
+        adapter_path = os.getenv('ADAPTER_PATH', None)
         @staticmethod
         def get_device() -> torch.device:
             """Utility function to get the available device."""
@@ -284,12 +308,10 @@ if __name__ == "__main__":
     logger.info(f"Dataset Path: {args.dataset_path}")
     logger.info(f"Output File: {args.output_file}")
     logger.info(f"Mode: {args.mode}")
-    logger.info(f"Prompt Length: {args.prompt_length}")
     logger.info(f"Device: {args.device}")
     logger.info(f"Token: {args.token}")
     logger.info(f"Reduce dataset {args.reduce_dataset}")
     logger.info(f"Reduce to size {args.dataset_size}")
-    logger.info(f"Soft Prompt Path: {args.soft_prompt_path}")
 
 
     if not args.dataset_path or not args.output_file or not args.mode:

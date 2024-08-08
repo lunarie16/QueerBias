@@ -8,7 +8,7 @@ from transformers import Trainer, TrainingArguments, DataCollatorForLanguageMode
     AutoModelForCausalLM, logging, GenerationConfig,  default_data_collator, get_linear_schedule_with_warmup, \
     BitsAndBytesConfig
 from transformers.optimization import Adafactor, AdafactorSchedule
-from peft import get_peft_config, get_peft_model, PromptTuningInit, PromptTuningConfig, TaskType, PeftType, LoraConfig, PrefixTuningConfig
+from peft import get_peft_config, get_peft_model, PromptTuningInit, PromptTuningConfig, TaskType, PeftType, LoraConfig, PrefixTuningConfig, AutoPeftModel
 from datasets import load_dataset, Dataset, DatasetDict, enable_caching, load_from_disk
 from dotenv import load_dotenv
 from PromptTuning import PromptTuningModelDDP, SoftPromptTrainerDDP
@@ -80,6 +80,7 @@ device = get_device()
 deepspeed_path = os.getenv("DEEPSPEED_PATH", None)
 num_gpu = int(os.getenv("NUM_GPU", 1))
 gradient_accum_steps = int(os.getenv("GRADIENT_ACCUMULATION_STEPS", 8))
+adapter_path = str(os.getenv("ADAPTER_PATH", None))
 
 local_rank = int(os.environ['LOCAL_RANK'])
 # torch.cuda.set_device(local_rank)
@@ -143,8 +144,10 @@ def define_peft_config(mode, model_name):
         settings from: https://huggingface.co/docs/peft/quicktour
         """
         peft_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8,
-            target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
+            task_type=TaskType.CAUSAL_LM, inference_mode=False,
+            # r=16,
+            r=8,
+            # target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"],
             lora_alpha=16, lora_dropout=0.1
         )
 
@@ -161,9 +164,10 @@ if tokenizer.pad_token is None:
     logger.info(f"Resizing token embeddings to {len(tokenizer)}")
     model.resize_token_embeddings(len(tokenizer))
 
-peft_config = define_peft_config(mode, model_name)
-model = get_peft_model(model, peft_config)
 model.config.gradient_checkpointing = True
+peft_config = define_peft_config(mode, model_name)
+# model = AutoPeftModel.from_pretrained(model_name, config=peft_config, adapter_name='queernews', is_trainable=True)
+model = get_peft_model(model, peft_config, adapter_name='queernews')
 logger.info(model.print_trainable_parameters())
 model.to(device)
 model = DDP(model, device_ids=[local_rank], output_device=local_rank)
@@ -212,7 +216,7 @@ else:
 
 
 short_model_name = model_name.split("/")[-1]
-output_dir = f"data/results/{mode}/peft/{short_model_name}"
+output_dir = f"data/results/{mode}/peft/{short_model_name}/no-eval/"
 logger.info(f"Output directory: {output_dir}")
 
 reduce_dataset = bool(int(os.getenv("REDUCE_DATASET", 1)))
@@ -231,7 +235,7 @@ os.makedirs(os.path.dirname(output_dir), exist_ok=True)
 if 'tokenized' not in dataset_path:
     logger.info("Dataset loaded. Now tokenizing...")
     dataset = dataset.map(tokenize_function, batched=True)
-    short_model_name = model_name.split("/")[-1]
+    short_model_name = model_name.split("/")[-1].replace('.', '-')
     dataset = remove_columns_from_dataset(dataset)
     dataset.save_to_disk(f"data/datasets/tokenized_{short_model_name}_queer_news.hf")
     logger.info(f"Tokenization complete. Saved to {f'data/datasets/tokenized_{short_model_name}_queer_news.hf'}")
@@ -251,18 +255,16 @@ logger.info(f"Final column names {train_dataset.column_names}")
 
 training_args = TrainingArguments(
     output_dir=output_dir,
-    eval_strategy="epoch",
     disable_tqdm=False,
     num_train_epochs=epochs,
     per_device_train_batch_size=batch_size,
-    per_device_eval_batch_size=batch_size,
     gradient_accumulation_steps=gradient_accum_steps,
     # gradient_checkpointing=True, # not available with ddp
     # learning_rate=learning_rate,
     # prediction_loss_only=True,
     report_to=["tensorboard"],
     weight_decay=0.01,
-    save_steps=1000,
+    save_steps=5000,
     save_total_limit=2,
     dataloader_num_workers=num_gpu,
     ddp_find_unused_parameters=False,
@@ -284,12 +286,12 @@ data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 optimizer = Adafactor(model.parameters(), scale_parameter=True,
                       warmup_init=True, lr=None, relative_step=True)
 lr_scheduler = AdafactorSchedule(optimizer)
+
 trainer = Trainer(
     model=model,
     args=training_args,
     data_collator=data_collator,
     train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
     optimizers=(optimizer, lr_scheduler)
 )
 
@@ -302,9 +304,8 @@ logger.info("Training complete.")
 
 
 trainer.save_model(output_dir)
+logger.info(f"Model saved to {output_dir}")
 
-logger.info("Evaluation started...")
-trainer.evaluate()
 end = time.time()
 elapsed_time = end - start
 end = time.strftime("%Y%m%d-%H%M%S")

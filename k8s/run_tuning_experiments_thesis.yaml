@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: lora-llama3-queer-news
+  name: softprompt-mistral-queer-news
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: lora-llama3-queer-news
+        - name: softprompt-mistral-queer-news
           image: registry.datexis.com/s91000/thesis-tuning:0.0.14
           command: ["/bin/sh", "-c"]
 #          command: ["python -m torch.distributed.launch --nproc_per_node=4  CUDA_LAUNCH_BLOCKING=1 code/main_no_class.py"]
@@ -34,8 +34,9 @@ spec:
               valueFrom:
                 resourceFieldRef:
                   resource: requests.cpu
+
             - name: MODEL_NAME
-              value: 'meta-llama/Meta-Llama-3-8B'
+              value: 'mistralai/Mistral-7B-v0.3'
               #              'google/gemma-7b'
               #              'meta-llama/Meta-Llama-3-8B'
               #                'mistralai/Mistral-7B-v0.3'
@@ -43,9 +44,9 @@ spec:
             - name: HF_TOKEN
               value: "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"
             - name: DATASET_PATH
-              value: 'data/datasets/tokenized_Meta-Llama-3-8B_queer_news.hf'
+              value: 'data/datasets/tokenized_Mistral-7B-v0-3_queer_news.hf'
             - name: MODE
-              value: "lora"
+              value: "soft-prompt"
             - name: PROMPT_LENGTH
               value: "10"
             - name: OUTPUT_FILE
@@ -53,7 +54,7 @@ spec:
             - name: CHUNK_SIZE
               value: "10000"
             - name: LM_MODEL_PATH
-              value: "meta-llama/Meta-Llama-3-8B"
+              value: "mistralai/Mistral-7B-v0.3"
             - name: REDUCE_DATASET
               value: "0"
             - name: REDUCE_DATASET_SIZE

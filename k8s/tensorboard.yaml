@@ -18,7 +18,7 @@ spec:
       containers:
         - name: tensorboard-tuning
           image: tensorflow/tensorflow:latest
-          command: ['sh', '-c', 'tensorboard --logdir data/data/results/soft-prompt/runs']
+          command: ['sh', '-c', 'tensorboard --logdir data/data/results']
           volumeMounts:
            - name: general-data
              mountPath: /data
