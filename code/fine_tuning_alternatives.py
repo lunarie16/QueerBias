@@ -217,6 +217,8 @@ else:
 
 short_model_name = model_name.split("/")[-1]
 output_dir = f"data/results/{mode}/peft/{short_model_name}/no-eval/"
+if mode == 'soft-prompt':
+    output_dir = f"data/results/{mode}/peft/{short_model_name}/no-eval/sp{prompt_length}"
 logger.info(f"Output directory: {output_dir}")
 
 reduce_dataset = bool(int(os.getenv("REDUCE_DATASET", 1)))
@@ -264,8 +266,6 @@ training_args = TrainingArguments(
     # prediction_loss_only=True,
     report_to=["tensorboard"],
     weight_decay=0.01,
-    save_steps=5000,
-    save_total_limit=2,
     dataloader_num_workers=num_gpu,
     ddp_find_unused_parameters=False,
     local_rank=local_rank,

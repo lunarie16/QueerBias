@@ -97,48 +97,35 @@ def mask_unigram(data, lm, n=1):
     return score
 
 def evaluate(args):
+    short_model_name = args.model_name.split("/")[-1]
+    adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
 
-
-    if args.mode != 'pretrained':
-        short_model_name = args.model_name.split("/")[-1]
-        adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
+    # load models in dependence on mode
+    if args.mode == 'lora':
         if os.getenv('CHECKPOINT'):
             checkpoint = str(os.getenv('CHECKPOINT', '1000'))
             adapter_model_name = f'data/results/{args.mode}/peft/{short_model_name}/checkpoint-{checkpoint}'
+        # if adapter path is set, load adapter model from path and overwrite checkpoint path
         if args.adapter_path:
             adapter_model_name = args.adapter_path
-        logger.info(f"Loading adapter model from {adapter_model_name}")
-        # model = AutoModelForCausalLM.from_pretrained(adapter_model_name).to(args.device)
+        logger.info(f"Loading adapter model for LoRA from {adapter_model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name).to(args.device)
-        # model = PeftModel.from_pretrained(base_model, adapter_model_name + '/queernews', 'queernews',
-        #                                              torch_dtype=torch.bfloat16,
-        #                                              token=args.token).to(args.device)
         peft_config = PeftConfig.from_pretrained(adapter_model_name + '/queernews')
-
-        # to initiate with random weights
         peft_config.init_lora_weights = False
         logger.info(f"Loading adapter model from config {peft_config}")
+        # add adapter
         model.add_adapter(peft_config, 'queernews')
+        # enable loaded adapter
         model.enable_adapters()
-        # model.load_adapter(adapter_model_name + '/queernews', adapter_name='queernews')
-        # logger.info(model.config.adapters)
-        # model.enable_adapters()
+        # verify that adapter is loaded as errors can occur
         logger.info(model.active_adapters())
 
-        for name, param in model.named_parameters():
-            logger.info(f'name: {name}, param: {param.requires_grad}')
-        # model = PeftModel.from_pretrained(model, adapter_model_name, 'queernews',
-        #                                             torch_dtype=torch.bfloat16).to(args.device)
-        # short_model_name = args.model_name.split("/")[-1]
-        # adapter_model_name = f"data/results/{args.mode}/peft/{short_model_name}"
-        # if args.mode == 'lora':
-        #     logger.info(f"LORA - Loading adapter model from {adapter_model_name}")
-        #     model.add_adapter(adapter_model_name, 'queernews')
-        #     model.set_adapter('queernews')
-        # else:
-        #     logger.info(f"Loading adapter model from {adapter_model_name}")
-        #     model = PeftModel.from_pretrained(model, adapter_model_name)
-    else:
+    elif args.mode == "soft-prompt":
+        model = AutoModelForCausalLM.from_pretrained(args.model_name,
+                                                     torch_dtype=torch.bfloat16).to(args.device)
+        logger.info(f"Loading soft prompts from: {adapter_model_name}")
+        model = PeftModel.from_pretrained(model, adapter_model_name)
+    elif args.mode == 'pretrained':
         logger.info(f"Loading model from {args.model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
                                                      torch_dtype=torch.bfloat16,

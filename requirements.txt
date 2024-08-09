@@ -7,6 +7,6 @@ datasets~=2.19.2
 torch~=2.3.1
 accelerate
 tensorboardX
-deepspeed
 sentencepiece
 protobuf
+peft
