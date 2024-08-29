@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gen-model-mode-info
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - name: gen-model-mode-info
+          image: registry.datexis.com/s91000/thesis-tuning:0.0.14
+          command: ["/bin/sh", "-c"]
+          args: ["cd data && python code/get_trainable_params.py" ]
+          volumeMounts:
+            - name: general-data
+              mountPath: /tuning/data
+            - name: root-temp
+              mountPath: /root
+          ports:
+            - containerPort: 22
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MY_CPU_REQUEST
+              valueFrom:
+                resourceFieldRef:
+                  resource: requests.cpu
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+            limits:
+              nvidia.com/gpu: 1
+      imagePullSecrets:
+        - name: private-registry-auth
+      restartPolicy: Never
+      nodeSelector:
+        gpu: a100
+      volumes:
+        - name: general-data
+          persistentVolumeClaim:
+            claimName: general-data
+#        - name: ssh-key
+#          secret:
+#            secretName: my-ssh-public-key
+#            defaultMode: 256
+        - name: root-temp
+          persistentVolumeClaim:
+            claimName: root-temp

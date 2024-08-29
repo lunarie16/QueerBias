@@ -83,7 +83,6 @@ gradient_accum_steps = int(os.getenv("GRADIENT_ACCUMULATION_STEPS", 8))
 adapter_path = str(os.getenv("ADAPTER_PATH", None))
 
 local_rank = int(os.environ['LOCAL_RANK'])
-# torch.cuda.set_device(local_rank)
 device = torch.device('cuda', local_rank)
 logger.info(f"Local rank: {local_rank}")
 
@@ -261,9 +260,6 @@ training_args = TrainingArguments(
     num_train_epochs=epochs,
     per_device_train_batch_size=batch_size,
     gradient_accumulation_steps=gradient_accum_steps,
-    # gradient_checkpointing=True, # not available with ddp
-    # learning_rate=learning_rate,
-    # prediction_loss_only=True,
     report_to=["tensorboard"],
     weight_decay=0.01,
     dataloader_num_workers=num_gpu,
@@ -271,7 +267,6 @@ training_args = TrainingArguments(
     local_rank=local_rank,
     remove_unused_columns=False,
     bf16=True,
-    # optim="adafactor"
 )
 if deepspeed_path:
     training_args.deepspeed = deepspeed_path

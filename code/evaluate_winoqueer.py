@@ -59,8 +59,6 @@ def mask_unigram(data, lm, n=1):
     n = n-gram of token that is masked, if n > 1, we mask tokens with overlapping
     n-grams.
     """
-    tokenizer = lm["tokenizer"]
-    uncased = lm["uncased"]
 
     sent1_token_ids, sent2_token_ids = data["sent_x"], data["sent_y"]
 
@@ -110,7 +108,7 @@ def evaluate(args):
             adapter_model_name = args.adapter_path
         logger.info(f"Loading adapter model for LoRA from {adapter_model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name).to(args.device)
-        peft_config = PeftConfig.from_pretrained(adapter_model_name + '/queernews')
+        peft_config = PeftConfig.from_pretrained(adapter_model_name)
         peft_config.init_lora_weights = False
         logger.info(f"Loading adapter model from config {peft_config}")
         # add adapter
@@ -121,10 +119,13 @@ def evaluate(args):
         logger.info(model.active_adapters())
 
     elif args.mode == "soft-prompt":
+        if args.adapter_path:
+            adapter_model_name = args.adapter_path
+        logger.info(f"Loading adapter model for soft prompts from {adapter_model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
                                                      torch_dtype=torch.bfloat16).to(args.device)
         logger.info(f"Loading soft prompts from: {adapter_model_name}")
-        model = PeftModel.from_pretrained(model, adapter_model_name)
+        model = PeftModel.from_pretrained(model, adapter_model_name + '/queernews', adapter_name='queernews')
     elif args.mode == 'pretrained':
         logger.info(f"Loading model from {args.model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
@@ -215,8 +216,9 @@ def evaluate(args):
     file_extension += args.dataset_path.split("/")[-1].split("_")[1]
     # add dataset size
     file_extension += str(len(df_data.index))
-    output_file = f"data/results/winoqueer/detailed_{file_extension}-{args.mode}.csv"
-    summary_path = f"data/results/winoqueer/summary_{file_extension}-{args.mode}.csv"
+    suffix = adapter_model_name.split("/")[-1]
+    output_file = f"data/results/winoqueer/detailed_{file_extension}-{args.mode}-{suffix}.csv"
+    summary_path = f"data/results/winoqueer/summary_{file_extension}-{args.mode}{suffix}.csv"
     df_score.to_csv(output_file)
 
 
