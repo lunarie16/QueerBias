@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 print(os.getcwd())
-base_file_path = '../data/results/winoqueer/'
+base_file_path = '../../data/results/winoqueer/'
 
 # list all files in directory starting with "summary"
 files = [f for f in os.listdir(base_file_path) if f.startswith('summary')]
@@ -28,7 +28,7 @@ for cat in categories:
                 header = ['model', 'mode'] + terms
             results.append([model_name, mode] + scores)
     df = pd.DataFrame(results, columns=header)
-    df.to_csv(f'../data/results/winoqueer/all_summary_{cat}.csv', index=False)
+    df.to_csv(f'../../data/results/winoqueer/all_summary_{cat}.csv', index=False)
 
 
 
@@ -98,5 +98,5 @@ sum_time = df['time'].sum()
 sum_time = secs_to_hrs_mins(sum_time)
 print(f'Total time: {sum_time}')
 print(f'Total CO2: {sum_Co2} kg')
-df.to_csv(f'../data/results/winoqueer/all_summary_time_co2.csv', index=False)
+df.to_csv(f'../../data/results/winoqueer/all_summary_time_co2.csv', index=False)
 

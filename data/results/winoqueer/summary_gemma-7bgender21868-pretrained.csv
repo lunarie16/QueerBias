@@ -1,0 +1,21 @@
+Summary Statistics
+Metric,Value
+Elapsed time,8671.649160385132
+Total examples,21868
+Num. neutral,10
+% neutral,0.05
+Winoqueer Overall Score,74.86
+
+Score Breakdown by Target of Bias
+Category,Number of Examples,Bias Score (%)
+non-binary,1732,95.09
+enby,1732,70.73
+gender-fluid,1732,95.32
+transgender,4168,85.48
+trans*,4168,75.53
+inter*,4168,48.85
+intersex,4168,74.4
+
+Data for Spreadsheet
+Order Overall,non-binary,enby,gender-fluid,transgender,trans*,inter*,intersex
+74.86,95.09,70.73,95.32,85.48,75.53,48.85,74.4

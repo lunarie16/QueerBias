@@ -23,7 +23,7 @@ grouped = df.groupby('cleaned_sent')['Gender_ID_x'].agg(lambda x: ', '.join(set(
 # Rename columns for clarity
 grouped.columns = ['sentence', 'Gender_ID_combinations']
 
-grouped.to_csv('data/winoqueer_final_grouped.csv')
+grouped.to_csv('data/datasets/winoqueer_final_grouped.csv')
 
 grouped_with_names = grouped[grouped['sentence'].str.contains(r'\b[A-Z][a-z]*\b', regex=True)]
 

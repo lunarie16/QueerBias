@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import json
 
-all_detailed_files = [f for f in os.listdir('../data/results/winoqueer/') if f.startswith('detailed')]
+all_detailed_files = [f for f in os.listdir('../../data/results/winoqueer/') if f.startswith('detailed')]
 
 categories = ['sexual', 'gender']
 modes = ['lora', 'pretrained', 'soft-prompt']
@@ -14,7 +14,7 @@ for mode in modes:
         result[mode] = []
         for file in all_detailed_files:
                 if mode in file:
-                        df = pd.read_csv(f'../data/results/winoqueer/{file}')
+                        df = pd.read_csv(f'../../data/results/winoqueer/{file}')
                         print(file)
                         logmax_mean_bias = df['sent_more_score'].mean()
                         print(df['sent_more_score'].describe())

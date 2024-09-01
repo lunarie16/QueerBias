@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 # # display complete content of row in dataframe
 # pd.set_option('display.expand_frame_repr', False)
 #
-all_detailed_files = [f for f in os.listdir('../data/results/winoqueer/') if f.startswith('detailed')]
+all_detailed_files = [f for f in os.listdir('../../data/results/winoqueer/') if f.startswith('detailed')]
 
 blue = '#004080'
 red = '#ea3b06'
@@ -31,112 +31,111 @@ colors = [blue, red, yellow]
 
 
 
+def create_overview_files():
+    #
+    # #
+    categories = ['sexual', 'gender']
+    modes = ['lora', 'pretrained', 'soft-prompt']
 
-#
-# #
-categories = ['sexual', 'gender']
-modes = ['lora', 'pretrained', 'soft-prompt']
+    result = {}
 
-result = {}
+    qualitative_df = pd.DataFrame()
+    header = ['orig_idx', 'model', 'mode', 'term_x', 'term_y', 'sentence_x','sentence_y' , 'diff', 'score_bias', 'score_cis']
+    all_diff_Df = pd.DataFrame()
+    header2 = ['model', 'mode', 'cat', 'diff']
+    result = []
+    result_all = []
 
-qualitative_df = pd.DataFrame()
-header = ['orig_idx', 'model', 'mode', 'term_x', 'term_y', 'sentence_x','sentence_y' , 'diff', 'score_bias', 'score_cis']
-all_diff_Df = pd.DataFrame()
-header2 = ['model', 'mode', 'cat', 'diff']
-result = []
-result_all = []
+    layout = None
 
-layout = None
+    for mode in modes:
+        mode_files = [f for f in all_detailed_files if mode.lower() in f]
+        for file in mode_files:
+            if mode == 'lora':
+                mode = 'LoRA'
+            if 'noeval' in file:
+                continue
 
-for mode in modes:
-    mode_files = [f for f in all_detailed_files if mode.lower() in f]
-    for file in mode_files:
-        if mode == 'lora':
-            mode = 'qLoRA'
-        if 'noeval' in file:
-            continue
+            if 'sexual' in file:
+                target = pd.read_csv(f'../../data/datasets/winoqueer_sexual_identity.csv')
+                cat = 'sexual'
+            else:
+                target = pd.read_csv(f'../../data/datasets/winoqueer_gender_identity.csv')
+                cat = 'gender'
+            model = file.split('_')[1].split(cat)[0]
 
-        if 'sexual' in file:
-            target = pd.read_csv(f'../data/datasets/winoqueer_sexual_identity.csv')
-            cat = 'sexual'
+
+            df = pd.read_csv(f'../../data/results/winoqueer/{file}')
+            df = df.merge(target, on='Unnamed: 0')
+
+            df['diff'] = abs(df['sent_more_score']) - abs(df['sent_less_score'])
+
+            min_diff = df['diff'].min()
+            max_diff = df['diff'].max()
+
+            # normalize diff to [-1,1]
+            # df['diff'] = ((df['diff'] - min_diff) / (max_diff - min_diff)) * 2 - 1
+
+            df = df.drop(columns=['Unnamed: 0', 'sent_more', 'sent_less', 'score'])
+    #         print(file)
+            # sort values by diff
+            df = df.sort_values(by='diff')
+    #
+    #         # print 5 smallest and 5 largest diffs
+    #
+
+
+            df_min = df[df['diff'] == df['diff'].min()]
+            df_max = df[df['diff'] == df['diff'].max()]
+    #
+            result.append({'orig_idx': df_min.index, 'model': model, 'mode': mode, 'term_x': df_min['Gender_ID_x'].values[0],
+                           'term_y': df_min['Gender_ID_y'].values[0],
+                           'sentence_x': df_min['sent_x'].values[0],
+                           'sentence_y':df_min['sent_y'].values[0],
+                           'diff': round(df_min['diff'].values[0], 4),
+                           'score_bias':  round(df_min['sent_more_score'].values[0], 4),
+                           'score_cis':  round(df_min['sent_less_score'].values[0], 4)})
+            result.append({'orig_idx': df_max.index,'model': model, 'mode': mode, 'term_x': df_max['Gender_ID_x'].values[0],
+                            'term_y': df_max['Gender_ID_y'].values[0],
+                           'sentence_x': df_max['sent_x'].values[0],
+                           'sentence_y':df_max['sent_y'].values[0],
+                           'diff': round(df_max['diff'].values[0], 4),
+                           'score_bias': round(df_max['sent_more_score'].values[0], 4),
+                            'score_cis': round(df_max['sent_less_score'].values[0], 4)})
+
+    #             # print(df['diff'].describe())
+            result_all.append({'model': model, 'mode': mode if mode != 'prompt' else 'soft-prompt', 'cat': cat, 'diff': df['diff'].to_list()})
+
+
+    qualitative_df = pd.DataFrame(result, columns=header)
+    qualitative_df.to_csv(f'../../data/results/winoqueer/qualitative_analysis.csv', index=False)
+    #
+    # sort data frame:
+    # fist by diff, then by model, mode by ['pretrained', 'LoRA', 'soft-prompt']
+    qualitative_df = qualitative_df.sort_values(by=['diff', 'model', 'mode', 'sentence_x'])
+
+    # ensure mode is sorted like ['pretrained', 'LoRA', 'soft-prompt']
+    # qualitative_df = qualitative_df.sort_values(by=['diff', 'model', 'mode'])
+
+    for i, row in qualitative_df.iterrows():
+        model = row['model'].replace("Meta", "").replace("-", " ").replace("b", "B").replace("v", "").strip().capitalize()
+        mode = row['mode'].replace('q', '')
+        if row['diff'] > 0:
+            print(f"{model} & {mode} & {row['sentence_y']} & {row['term_x']} \\\\ ")
         else:
-            target = pd.read_csv(f'../data/datasets/winoqueer_gender_identity.csv')
-            cat = 'gender'
-        model = file.split('_')[1].split(cat)[0]
+            print(f"{model} & {mode} & {row['sentence_x']} & {row['term_y']} \\\\ ")
 
+    #
+    all_diff_Df = pd.DataFrame(result_all, columns=header2)
+    all_diff_Df.to_csv(f'../../data/results/winoqueer/qualitative_analysis_all_diff_2.csv', index=False)
 
-        df = pd.read_csv(f'../data/results/winoqueer/{file}')
-        df = df.merge(target, on='Unnamed: 0')
-
-        df['diff'] = abs(df['sent_more_score']) - abs(df['sent_less_score'])
-
-        min_diff = df['diff'].min()
-        max_diff = df['diff'].max()
-
-        # normalize diff to [-1,1]
-        df['diff'] = ((df['diff'] - min_diff) / (max_diff - min_diff)) * 2 - 1
-
-        df = df.drop(columns=['Unnamed: 0', 'sent_more', 'sent_less', 'score'])
-#         print(file)
-        # sort values by diff
-        df = df.sort_values(by='diff')
-#
-#         # print 5 smallest and 5 largest diffs
-#
-
-
-        df_min = df[df['diff'] == df['diff'].min()]
-        df_max = df[df['diff'] == df['diff'].max()]
-#
-        result.append({'orig_idx': df_min.index, 'model': model, 'mode': mode, 'term_x': df_min['Gender_ID_x'].values[0],
-                       'term_y': df_min['Gender_ID_y'].values[0],
-                       'sentence_x': df_min['sent_x'].values[0],
-                       'sentence_y':df_min['sent_y'].values[0],
-                       'diff': round(df_min['diff'].values[0], 4),
-                       'score_bias':  round(df_min['sent_more_score'].values[0], 4),
-                       'score_cis':  round(df_min['sent_less_score'].values[0], 4)})
-        result.append({'orig_idx': df_max.index,'model': model, 'mode': mode, 'term_x': df_max['Gender_ID_x'].values[0],
-                        'term_y': df_max['Gender_ID_y'].values[0],
-                       'sentence_x': df_max['sent_x'].values[0],
-                       'sentence_y':df_max['sent_y'].values[0],
-                       'diff': round(df_max['diff'].values[0], 4),
-                       'score_bias': round(df_max['sent_more_score'].values[0], 4),
-                        'score_cis': round(df_max['sent_less_score'].values[0], 4)})
-
-#             # print(df['diff'].describe())
-        result_all.append({'model': model, 'mode': mode if mode != 'prompt' else 'soft-prompt', 'cat': cat, 'diff': df['diff'].to_list()})
-
-
-qualitative_df = pd.DataFrame(result, columns=header)
-# qualitative_df.to_csv(f'../data/results/winoqueer/qualitative_analysis_normalized.csv', index=False)
-#
-# sort data frame:
-# fist by diff, then by model, mode by ['pretrained', 'LoRA', 'soft-prompt']
-qualitative_df = qualitative_df.sort_values(by=['diff', 'model', 'mode', 'sentence_x'])
-
-# ensure mode is sorted like ['pretrained', 'LoRA', 'soft-prompt']
-# qualitative_df = qualitative_df.sort_values(by=['diff', 'model', 'mode'])
-
-for i, row in qualitative_df.iterrows():
-    model = row['model'].replace("Meta", "").replace("-", " ").replace("b", "B").replace("v", "").strip().capitalize()
-    mode = row['mode'].replace('q', '')
-    if row['diff'] > 0:
-        print(f"{model} & {mode} & {row['sentence_y']} & {row['term_x']} \\\\ ")
-    else:
-        print(f"{model} & {mode} & {row['sentence_x']} & {row['term_y']} \\\\ ")
-
-#
-all_diff_Df = pd.DataFrame(result_all, columns=header2)
-all_diff_Df.to_csv(f'../data/results/winoqueer/qualitative_analysis_all_diff_2_normalized.csv', index=False)
-
-
+# create_overview_files()
 def parse_cell(x):
     return json.loads(x)
 
 def add_fig_to_layout(df_orig, categories):
     models = sorted(df_orig['model'].unique())
     modes = ['pretrained', 'LoRA', 'soft-prompt']
-    titles = [f'{model.capitalize().replace("-", " ")} {mode}' for model in models for mode in modes]
     titles = [f'{model.replace("Meta-", "").capitalize().replace("-", " ").replace("b", "B")}' for model in models]
     # double each title entry
     titles = [val for val in titles for _ in (0, 1)]
@@ -157,7 +156,7 @@ def add_fig_to_layout(df_orig, categories):
                 if mode == 'noeval':
                     continue
 
-                df_subset = df[(df['model'] == model) & (df['mode'] == mode)]
+                df_subset = df[(df['model'] == model) & (df['mode'].replace('q', '') == mode)]
                 data_points = df_subset['diff'].to_list()
                 if len(data_points) == 1:
                     data_points = data_points[0]
@@ -169,37 +168,26 @@ def add_fig_to_layout(df_orig, categories):
                 plot = go.Box(y=data_points,  line_color=colors[j], name=mode, showlegend=False,
                               line_width=1, boxpoints=False
                               )
-                data_mode = np.quantile(data_points, 0.5)
-                # fig.add_annotation(y = data_mode,  text=f'mode: {data_mode:.2f}',xshift=1,showarrow=False)
 
                 fig.add_trace(plot, row=i + 1, col=k + 1)
-        # result = df[df['model'] == model]['diff'].to_list()
-        # result = [json.loads(x.replace('"', '')) for x in result]
-        # fig2 = ff.create_distplot(result, modes, show_hist=False, colors=colors)
-        # fig2.update_layout(title_text=f'{model} differences of log softmax for {cat}')
-        # fig2.write_image(f'../data/results/winoqueer/distplot_diff_{model}.pdf')
-        # fig2.show()
-    # fig.write_image(f'../data/results/winoqueer/hist_diff_all.pdf')
     fig.update_layout(
-        # title_text=f'\t\t\t\t\t              Gender Identity            Sexual Identity',
                        showlegend=False,
                       width=1000,
                       height=900,
                       )
-    # xaxis_title='Difference of log softmax', yaxis_title='Frequency',
-    # fig.write_image(f'../data/results/winoqueer/boxplot_diff_comb.pdf')
+    fig.write_image(f'../../data/results/winoqueer/boxplot_diff_comb.pdf')
     fig.show()
 
 
 #
-df = pd.read_csv(f'../data/results/winoqueer/qualitative_analysis_all_diff_2.csv')
+df = pd.read_csv(f'../../data/results/winoqueer/qualitative_analysis_all_diff_2.csv')
 categories = ['gender', 'sexual']
 add_fig_to_layout(df, categories)
 
 # calculate std deviation for diff for each model and mode
 models = df['model'].unique()
 modes = df['mode'].unique()
-df['diff'] = df['diff'].apply(lambda x: json.loads(x))
+# df['diff'] = df['diff'].apply(lambda x: json.loads(x))
 
 for model in models:
     for mode in modes:

@@ -1,0 +1,28 @@
+Summary Statistics
+Metric,Value
+Elapsed time,58619.135744810104
+Total examples,87999
+Num. neutral,607
+% neutral,0.69
+Winoqueer Overall Score,43.74
+
+Score Breakdown by Target of Bias
+Category,Number of Examples,Bias Score (%)
+homosexual,10926,37.25
+gay,8109,51.94
+homo,10926,30.91
+queer,6480,56.48
+demisexual,5172,32.54
+asexual,5172,33.06
+demi,5172,57.56
+ace,5172,53.69
+bisexual,8856,46.99
+bi,8856,45.22
+lesbian,2907,44.17
+sapphic,2907,42.45
+pansexual,3672,46.49
+pan,3672,44.53
+
+Data for Spreadsheet
+Order Overall,homosexual,gay,homo,queer,demisexual,asexual,demi,ace,bisexual,bi,lesbian,sapphic,pansexual,pan
+43.74,37.25,51.94,30.91,56.48,32.54,33.06,57.56,53.69,46.99,45.22,44.17,42.45,46.49,44.53
