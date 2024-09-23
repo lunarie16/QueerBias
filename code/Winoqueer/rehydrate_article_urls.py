@@ -6,7 +6,7 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 
-articles = pd.read_csv('./data/checkpoints/article_texts-21000.csv')
+# articles = pd.read_csv('./data/checkpoints/article_texts-21000.csv')
 
 # drop all columns with nan
 

@@ -121,11 +121,13 @@ def evaluate(args):
     elif args.mode == "soft-prompt":
         if args.adapter_path:
             adapter_model_name = args.adapter_path
+            if os.path.exists(adapter_model_name + '/queernews'):
+                adapter_model_name = adapter_model_name + '/queernews'
         logger.info(f"Loading adapter model for soft prompts from {adapter_model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,
                                                      torch_dtype=torch.bfloat16).to(args.device)
         logger.info(f"Loading soft prompts from: {adapter_model_name}")
-        model = PeftModel.from_pretrained(model, adapter_model_name + '/queernews', adapter_name='queernews')
+        model = PeftModel.from_pretrained(model, adapter_model_name, adapter_name='queernews')
     elif args.mode == 'pretrained':
         logger.info(f"Loading model from {args.model_name}")
         model = AutoModelForCausalLM.from_pretrained(args.model_name,

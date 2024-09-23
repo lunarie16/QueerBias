@@ -42,7 +42,7 @@ spec:
               #                'mistralai/Mistral-7B-v0.3'
               #            "openlm-research/open_llama_13b"
             - name: HF_TOKEN
-              value: "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"
+              value: ""
             - name: DATASET_PATH
               value: 'data/datasets/tokenized_gemma-7b_queer_news.hf'
             - name: MODE

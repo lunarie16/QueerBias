@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: winoqueer-eval-gemma-sexual-lora
+  name: winoqueer-eval-llama-genderqueer-soft-prompt
 spec:
   backoffLimit: 0
   template:
     spec:
       containers:
-        - name: winoqueer-eval-gemma-sexual-lora
+        - name: winoqueer-eval-llama-genderqueer-softprompt
           image: registry.datexis.com/s91000/thesis-tuning:0.0.14
           command: ["/bin/sh", "-c"]
           args: ["cd data && python code/evaluate_winoqueer.py" ]
@@ -34,17 +34,17 @@ spec:
                 resourceFieldRef:
                   resource: requests.cpu
             - name: MODEL_NAME
-              value: "google/gemma-7b"
+              value: "meta-llama/Meta-Llama-3-8B"
 #              'google/gemma-7b'
 #              'meta-llama/Meta-Llama-3-8B'
 #                'mistralai/Mistral-7B-v0.3'
 #            "openlm-research/open_llama_13b"
             - name: HF_TOKEN
-              value: "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"
+              value: ""
             - name: DATASET_PATH
-              value: 'data/datasets/winoqueer_sexual_identity.csv'
+              value: 'data/datasets/winoqueer_gender_identity_queer.csv'
             - name: MODE
-              value: "lora"
+              value: "soft-prompt"
             - name: PROMPT_LENGTH
               value: "10"
             - name: OUTPUT_FILE
@@ -60,7 +60,7 @@ spec:
             - name: REDUCE_DATASET
               value: '0'
             - name: ADAPTER_PATH
-              value: 'data/results/lora/peft/gemma-7b/queernews'
+              value: 'data/results/soft-prompt/peft/Meta-Llama-3-8B'
           resources:
             requests:
               nvidia.com/gpu: 2
